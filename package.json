@@ -1,0 +1,8 @@
+{
+  "name": "bid2ride-monorepo",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build": "npm run build --prefix frontend/landing && npm run build --prefix frontend/passenger && npm run build --prefix frontend/driver && npm run build --prefix frontend/admin"
+  }
+}

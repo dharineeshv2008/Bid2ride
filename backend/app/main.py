@@ -16,29 +16,43 @@ from app.core.exceptions import Bid2RideException
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Manages application startup and shutdown lifespan events."""
+    """Manages application startup and shutdown lifespan events safely."""
     # STARTUP
-    setup_logging()
-    logger.info("Starting up Bid2Ride API...")
+    try:
+        setup_logging()
+        logger.info("Starting up Bid2Ride API...")
+    except Exception:
+        pass
     
-    # Initialize Redis Pool
-    redis_manager.initialize()
-    redis_alive = await redis_manager.ping()
+    redis_alive = False
+    try:
+        redis_manager.initialize()
+        redis_alive = await redis_manager.ping()
+    except Exception as e:
+        logger.warning(f"Redis initialization warning (optional service): {e}")
+
+    db_alive = False
+    try:
+        db_alive = await check_database_health()
+    except Exception as e:
+        logger.warning(f"Database health check warning during startup: {e}")
     
-    # Verify DB connection
-    db_alive = await check_database_health()
-    
-    logger.info(
-        "Services connection health checks completed",
-        postgres_alive=db_alive,
-        redis_alive=redis_alive
-    )
+    try:
+        logger.info(
+            "Services connection health checks completed",
+            postgres_alive=db_alive,
+            redis_alive=redis_alive
+        )
+    except Exception:
+        pass
     
     yield
     
     # SHUTDOWN
-    logger.info("Shutting down Bid2Ride API...")
-    await redis_manager.close()
+    try:
+        await redis_manager.close()
+    except Exception:
+        pass
 
 
 from app.api.router import root_router
@@ -188,18 +202,24 @@ async def root_index() -> dict:
         "api_documentation": "/docs"
     }
 
+# Store clean FastAPI reference for direct serverless ASGI execution (Vercel)
+fastapi_app = app
+
 # Wrap FastAPI application with Socket.IO ASGI server wrapper
-import socketio
-from app.services.socket_service import sio
+try:
+    import socketio
+    from app.services.socket_service import sio
 
-class ASGIAppWrapper(socketio.ASGIApp):
-    @property
-    def dependency_overrides(self):
-        return self.other_asgi_app.dependency_overrides
+    class ASGIAppWrapper(socketio.ASGIApp):
+        @property
+        def dependency_overrides(self):
+            return self.other_asgi_app.dependency_overrides
 
-    @dependency_overrides.setter
-    def dependency_overrides(self, value):
-        self.other_asgi_app.dependency_overrides = value
+        @dependency_overrides.setter
+        def dependency_overrides(self, value):
+            self.other_asgi_app.dependency_overrides = value
 
-app = ASGIAppWrapper(sio, other_asgi_app=app)
+    app = ASGIAppWrapper(sio, other_asgi_app=app)
+except Exception:
+    pass
 

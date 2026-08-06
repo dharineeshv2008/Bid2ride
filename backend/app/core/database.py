@@ -1,21 +1,32 @@
+import os
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from app.core.config import settings
 
-# Supabase requires SSL; this is handled via ?ssl=require in the DATABASE_URL
-# For URLs without explicit SSL (e.g. local dev), no extra connect_args needed.
+# Detect Vercel serverless environment
+IS_SERVERLESS = bool(os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+
 _connect_args = {}
-if "ssl=require" not in settings.ASYNC_DATABASE_URI and "supabase" in settings.ASYNC_DATABASE_URI.lower():
+db_uri = settings.ASYNC_DATABASE_URI or ""
+
+# Configure SSL for Supabase / Cloud databases if not present in query string
+if ("supabase" in db_uri.lower() or "pooler" in db_uri.lower()) and "ssl=" not in db_uri:
     _connect_args["ssl"] = "require"
 
-# Configure async engine with pool parameters
-engine = create_async_engine(
-    settings.ASYNC_DATABASE_URI,
-    pool_size=20,
-    max_overflow=10,
-    pool_pre_ping=True,
-    echo=False,
-    connect_args=_connect_args
-)
+engine_kwargs = {
+    "echo": False,
+    "pool_pre_ping": True,
+    "connect_args": _connect_args,
+}
+
+if IS_SERVERLESS:
+    engine_kwargs["pool_size"] = 5
+    engine_kwargs["max_overflow"] = 5
+    engine_kwargs["pool_recycle"] = 300
+else:
+    engine_kwargs["pool_size"] = 20
+    engine_kwargs["max_overflow"] = 10
+
+engine = create_async_engine(db_uri, **engine_kwargs)
 
 # Async session maker
 SessionLocal = async_sessionmaker(

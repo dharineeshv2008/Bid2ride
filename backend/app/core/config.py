@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", case_sensitive=True
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=True, extra="ignore"
     )
 
     PROJECT_NAME: str = "Bid2Ride"
@@ -48,24 +48,30 @@ class Settings(BaseSettings):
     @field_validator("ASYNC_DATABASE_URI", mode="before")
     @classmethod
     def assemble_db_connection(cls, v: Optional[str], values: any) -> any:
-        if isinstance(v, str) and v:
-            return v
-
-        data = values.data
-
-        # If DATABASE_URL is explicitly provided (e.g. Supabase full connection string), use it
-        db_url = data.get("DATABASE_URL")
-        if db_url:
-            if db_url.startswith("postgresql://"):
+        data = values.data if hasattr(values, "data") else {}
+        db_url = v or data.get("DATABASE_URL")
+        
+        if db_url and isinstance(db_url, str):
+            # Normalize postgres:// and postgresql:// to postgresql+asyncpg://
+            if db_url.startswith("postgres://"):
+                db_url = db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+            elif db_url.startswith("postgresql://"):
                 db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
             elif not db_url.startswith("postgresql+asyncpg://"):
                 db_url = f"postgresql+asyncpg://{db_url}"
+            
+            # Clean sslmode query parameter to ssl for asyncpg compatibility
             if "sslmode=" in db_url:
                 db_url = db_url.replace("sslmode=", "ssl=")
             return db_url
 
         # Fall back to constructing from individual POSTGRES_* fields
-        return f"postgresql+asyncpg://{data.get('POSTGRES_USER')}:{data.get('POSTGRES_PASSWORD')}@{data.get('POSTGRES_SERVER')}:{data.get('POSTGRES_PORT')}/{data.get('POSTGRES_DB')}"
+        p_user = data.get("POSTGRES_USER") or "bid2ride_user"
+        p_pass = data.get("POSTGRES_PASSWORD") or "bid2ride_password"
+        p_server = data.get("POSTGRES_SERVER") or "localhost"
+        p_port = data.get("POSTGRES_PORT") or 5432
+        p_db = data.get("POSTGRES_DB") or "bid2ride_db"
+        return f"postgresql+asyncpg://{p_user}:{p_pass}@{p_server}:{p_port}/{p_db}"
 
     # Redis Config
     REDIS_HOST: str = "localhost"
