@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bid2Ride | Dual-App Bidding Simulator</title>
+  <!-- Google Fonts: Outfit (headings) & Inter (body) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Background Glows -->
+  <div class="glow glow-blue"></div>
+  <div class="glow glow-green"></div>
+
+  <!-- Header Dashboard Info -->
+  <header class="app-dashboard-header">
+    <div class="logo-container">
+      <span class="logo-icon">B</span>
+      <div class="logo-text">
+        <h1>Bid2Ride</h1>
+        <p>Marketplace Simulation Engine • Series A Pitch</p>
+      </div>
+    </div>
+    <div class="system-status">
+      <div class="status-indicator">
+        <span class="pulse-dot"></span>
+        <span>Mock Backend Online</span>
+      </div>
+      <div class="reset-btn" id="reset-simulation-btn">Reset Simulation</div>
+    </div>
+  </header>
+
+  <!-- Main Simulator Layout -->
+  <main class="simulator-container">
+
+    <!-- PASSENGER DEVICE -->
+    <div class="device-wrapper passenger-theme">
+      <div class="device-label">PASSENGER APP &bull; "THE TRAVELER"</div>
+      <div class="smartphone-frame">
+        <div class="screen-notch"></div>
+        <div class="screen-content" id="passenger-screen-container">
+          
+          <!-- PASSENGER VIEW: HOME / REQUEST -->
+          <div class="view active" id="p-view-home">
+            <!-- Simulated Top Bar -->
+            <div class="app-header">
+              <span class="app-title font-outfit">Request Ride</span>
+              <div class="header-avatar">P</div>
+            </div>
+            
+            <!-- Map Container -->
+            <div class="map-container">
+              <svg class="svg-map" viewBox="0 0 400 400" id="passenger-map">
+                <!-- Roads -->
+                <path class="road-path" d="M 0,100 L 400,100" />
+                <path class="road-path" d="M 0,300 L 400,300" />
+                <path class="road-path" d="M 100,0 L 100,400" />
+                <path class="road-path" d="M 300,0 L 300,400" />
+                <path class="road-path route-line" id="p-route-polyline" d="" />
+                
+                <!-- Markers -->
+                <circle class="map-pin passenger-pin" id="p-pickup-marker" cx="100" cy="300" r="8" />
+                <circle class="map-pin dropoff-pin" id="p-dropoff-marker" cx="300" cy="100" r="8" />
+                <g class="car-marker" id="p-driver-marker" transform="translate(-100,-100)">
+                  <circle cx="0" cy="0" r="10" fill="#10b981" stroke="#ffffff" stroke-width="2" />
+                  <path d="M-4,-2 L4,-2 L0,-7 Z" fill="#ffffff" />
+                </g>
+              </svg>
+              <div class="map-overlay-banner" id="p-map-eta-banner" style="display: none;">
+                Estimated Arrival: 2 mins
+              </div>
+            </div>
+
+            <!-- Booking Bottom Sheet -->
+            <div class="bottom-sheet">
+              <div class="sheet-handle"></div>
+              <h2 class="font-outfit sheet-title">Where to?</h2>
+              
+              <!-- Address Fields -->
+              <div class="address-group">
+                <div class="address-row">
+                  <span class="dot-indicator green-dot"></span>
+                  <input type="text" value="Current Location (123 Main St)" readonly />
+                </div>
+                <div class="address-row">
+                  <span class="dot-indicator red-dot"></span>
+                  <input type="text" value="456 Broadway Ave" readonly />
+                </div>
+              </div>
+
+              <!-- Category selector -->
+              <div class="category-tabs">
+                <div class="category-tab active" data-category="ECONOMY">
+                  <span class="cat-icon">🚗</span>
+                  <span class="cat-label">Economy</span>
+                </div>
+                <div class="category-tab" data-category="COMFORT">
+                  <span class="cat-icon">✨</span>
+                  <span class="cat-label">Comfort</span>
+                </div>
+                <div class="category-tab" data-category="XL">
+                  <span class="cat-icon">🚐</span>
+                  <span class="cat-label">XL</span>
+                </div>
+              </div>
+
+              <!-- Budget selector -->
+              <div class="budget-section">
+                <div class="budget-header">
+                  <span>Maximum Budget</span>
+                  <span class="budget-val font-outfit" id="p-budget-val">$15.00</span>
+                </div>
+                <input type="range" class="budget-slider" id="p-budget-slider" min="8" max="25" value="15" step="0.5" />
+                <div class="budget-gauge">
+                  <div class="gauge-label font-outfit" id="p-gauge-status">Sweet Spot ($13 - $18)</div>
+                </div>
+              </div>
+
+              <!-- Primary action -->
+              <button class="primary-btn passenger-btn font-outfit" id="p-find-drivers-btn">Find Drivers</button>
+            </div>
+            
+            <!-- Bottom Navbar -->
+            <div class="bottom-nav">
+              <div class="nav-item active"><span>Explore</span></div>
+              <div class="nav-item"><span>Trips</span></div>
+              <div class="nav-item"><span>Wallet</span></div>
+              <div class="nav-item"><span>Profile</span></div>
+            </div>
+          </div>
+
+          <!-- PASSENGER VIEW: LIVE BID ROOM (WAITING) -->
+          <div class="view" id="p-view-bid-room">
+            <div class="app-header">
+              <span class="app-title font-outfit">Live Bid Room</span>
+            </div>
+
+            <!-- Radar Loading Area -->
+            <div class="radar-section">
+              <div class="radar-pulse-container">
+                <div class="radar-pulse pulse-1"></div>
+                <div class="radar-pulse pulse-2"></div>
+                <div class="radar-pulse pulse-3"></div>
+                <div class="radar-avatar font-outfit">B</div>
+              </div>
+              <div class="radar-status-text font-outfit">Finding drivers...</div>
+              <div class="radar-route-details">Current Location ➔ 456 Broadway Ave</div>
+            </div>
+
+            <!-- Bidding Section -->
+            <div class="bids-section">
+              <div class="bids-sorting-tabs">
+                <div class="sort-chip active" id="p-sort-best">Best Value</div>
+                <div class="sort-chip" id="p-sort-cheap">Cheapest</div>
+                <div class="sort-chip" id="p-sort-fast">Fastest</div>
+              </div>
+
+              <!-- List of bids -->
+              <div class="bids-list" id="p-bids-list-container">
+                <div class="empty-bids-state" id="p-empty-bids">
+                  <p>Broadcasting your budget to nearby drivers...</p>
+                </div>
+              </div>
+            </div>
+
+            <button class="cancel-request-btn font-outfit" id="p-cancel-request-btn">Cancel Request</button>
+          </div>
+
+          <!-- PASSENGER VIEW: ACTIVE RIDE -->
+          <div class="view" id="p-view-active-ride">
+            <div class="app-header">
+              <span class="app-title font-outfit" id="p-ride-status-title">En Route</span>
+              <div class="emergency-sos-btn" id="p-sos-btn">SOS</div>
+            </div>
+
+            <!-- Map Container for Tracking -->
+            <div class="map-container tracking-map">
+              <!-- Reuses same svg-map but updates positions -->
+              <div class="map-overlay-banner alert-banner" id="p-verification-banner">
+                Share OTP with driver to start ride
+              </div>
+            </div>
+
+            <div class="active-ride-card">
+              <!-- OTP Box -->
+              <div class="otp-container" id="p-otp-box">
+                <span class="otp-label">RIDE VERIFICATION CODE</span>
+                <span class="otp-number font-outfit" id="p-otp-display">8492</span>
+              </div>
+
+              <!-- Driver details -->
+              <div class="driver-profile-row">
+                <div class="driver-pic">👨🏻‍✈️</div>
+                <div class="driver-details">
+                  <h3 class="font-outfit" id="p-driver-name">Michael D.</h3>
+                  <p class="driver-rating">⭐ <span id="p-driver-rating">4.9</span> &bull; <span id="p-driver-car">Toyota Camry</span></p>
+                  <p class="driver-plate" id="p-driver-plate">ABC-1234</p>
+                </div>
+                <div class="driver-actions">
+                  <div class="circle-action-btn">💬</div>
+                  <div class="circle-action-btn">📞</div>
+                </div>
+              </div>
+
+              <!-- Sub-actions -->
+              <div class="active-ride-actions">
+                <div class="cancel-ride-link" id="p-cancel-ride-active">Cancel Ride</div>
+                <div class="ride-category-pill" id="p-ride-cost-pill">$15.00</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- PASSENGER VIEW: RATING -->
+          <div class="view" id="p-view-rating">
+            <div class="app-header">
+              <span class="app-title font-outfit">Rate Your Ride</span>
+            </div>
+            
+            <div class="rating-container">
+              <div class="success-icon">🎉</div>
+              <h2 class="font-outfit rating-headline">You have arrived!</h2>
+              <p class="rating-sub">How was your trip with <span id="p-rating-driver-name">Michael</span>?</p>
+              
+              <div class="stars-row">
+                <span class="star" data-rating="1">★</span>
+                <span class="star" data-rating="2">★</span>
+                <span class="star" data-rating="3">★</span>
+                <span class="star" data-rating="4">★</span>
+                <span class="star" data-rating="5">★</span>
+              </div>
+
+              <textarea placeholder="Write feedback for your driver (optional)..." class="feedback-textarea" id="p-feedback-text"></textarea>
+              
+              <button class="primary-btn passenger-btn font-outfit" id="p-submit-rating-btn">Submit Feedback</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- DRIVER DEVICE -->
+    <div class="device-wrapper driver-theme">
+      <div class="device-label">DRIVER APP &bull; "THE PILOT"</div>
+      <div class="smartphone-frame">
+        <div class="screen-notch"></div>
+        <div class="screen-content" id="driver-screen-container">
+
+          <!-- DRIVER VIEW: OFFLINE / COCKPIT -->
+          <div class="view active" id="d-view-offline">
+            <!-- Simulated Top Bar -->
+            <div class="app-header">
+              <span class="app-title font-outfit">Pilot Cockpit</span>
+              <div class="driver-status-badge offline-badge" id="d-status-text-badge">OFFLINE</div>
+            </div>
+
+            <!-- Go Online Slider Card -->
+            <div class="offline-hero-card">
+              <div class="online-slider-container">
+                <div class="online-slider-track" id="d-online-track">
+                  <span class="slider-text" id="d-slider-prompt">SLIDE TO GO ONLINE</span>
+                  <div class="online-slider-thumb" id="d-online-thumb">➔</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Stats Block -->
+            <div class="stats-container">
+              <div class="stat-card">
+                <span class="stat-label">TODAY'S EARNINGS</span>
+                <span class="stat-val font-outfit locked-stat" id="d-today-earnings">$0.00</span>
+                <div class="sparkline-container" id="d-sparkline">
+                  <!-- Simulated graph when offline is empty -->
+                  <svg class="sparkline-svg" viewBox="0 0 100 30">
+                    <path class="sparkline-path" d="M0,25 L20,25 L40,25 L60,25 L80,25 L100,25" />
+                  </svg>
+                </div>
+              </div>
+
+              <div class="stat-grid-row">
+                <div class="stat-card half-card">
+                  <span class="stat-label">TRIPS</span>
+                  <span class="stat-val font-outfit locked-stat" id="d-trips-count">0</span>
+                </div>
+                <div class="stat-card half-card">
+                  <span class="stat-label">ONLINE TIME</span>
+                  <span class="stat-val font-outfit locked-stat" id="d-online-time">0h 0m</span>
+                </div>
+              </div>
+
+              <div class="stat-card balance-card">
+                <div class="balance-details">
+                  <span class="stat-label">CURRENT BALANCE</span>
+                  <span class="stat-val font-outfit locked-stat" id="d-balance-val">$0.00</span>
+                </div>
+                <button class="cashout-btn disabled" id="d-cashout-btn" disabled>Cash Out</button>
+              </div>
+            </div>
+
+            <!-- Bottom Navbar -->
+            <div class="bottom-nav">
+              <div class="nav-item active"><span>Dashboard</span></div>
+              <div class="nav-item"><span>Requests</span></div>
+              <div class="nav-item"><span>Earnings</span></div>
+              <div class="nav-item"><span>Profile</span></div>
+            </div>
+          </div>
+
+          <!-- DRIVER VIEW: ONLINE / DASHBOARD -->
+          <div class="view" id="d-view-online">
+            <div class="app-header">
+              <span class="app-title font-outfit">Live Radar</span>
+              <div class="go-offline-btn font-outfit" id="d-go-offline-btn">Go Offline</div>
+            </div>
+
+            <!-- Map View for Driver -->
+            <div class="map-container driver-map">
+              <svg class="svg-map dark-map" viewBox="0 0 400 400" id="driver-map">
+                <!-- Roads -->
+                <path class="road-path dark-road" d="M 0,100 L 400,100" />
+                <path class="road-path dark-road" d="M 0,300 L 400,300" />
+                <path class="road-path dark-road" d="M 100,0 L 100,400" />
+                <path class="road-path dark-road" d="M 300,0 L 300,400" />
+                
+                <!-- Radar Sweep Circle -->
+                <circle cx="100" cy="300" r="100" class="radar-sweep" />
+                <!-- Driver Pin -->
+                <circle cx="100" cy="300" r="8" fill="#10b981" stroke="#ffffff" stroke-width="2" />
+              </svg>
+              <div class="map-overlay-banner green-banner">
+                Searching for passenger requests...
+              </div>
+            </div>
+
+            <!-- Stats overlay card -->
+            <div class="online-stats-overlay">
+              <div class="online-stat-item">
+                <span class="online-stat-lbl">TODAY</span>
+                <span class="online-stat-num font-outfit" id="d-online-earnings-display">$184.50</span>
+              </div>
+              <div class="online-stat-item">
+                <span class="online-stat-lbl">WIN RATE</span>
+                <span class="online-stat-num font-outfit">78%</span>
+              </div>
+              <div class="online-stat-item">
+                <span class="online-stat-lbl">RATING</span>
+                <span class="online-stat-num font-outfit">4.9 ★</span>
+              </div>
+            </div>
+
+            <!-- Bottom Navbar -->
+            <div class="bottom-nav">
+              <div class="nav-item active"><span>Dashboard</span></div>
+              <div class="nav-item"><span>Requests</span></div>
+              <div class="nav-item"><span>Earnings</span></div>
+              <div class="nav-item"><span>Profile</span></div>
+            </div>
+          </div>
+
+          <!-- DRIVER VIEW: QUICK BID CONSOLE -->
+          <div class="view" id="d-view-bid-console">
+            <!-- Countdown Progress Bar -->
+            <div class="countdown-bar-container">
+              <div class="countdown-progress-bar" id="d-countdown-progress"></div>
+            </div>
+
+            <div class="app-header compact-header">
+              <span class="app-title font-outfit">New Request Found</span>
+              <span class="timer-countdown font-outfit" id="d-timer-digits">15s</span>
+            </div>
+
+            <!-- Route Preview Map -->
+            <div class="map-container compact-map">
+              <svg class="svg-map dark-map" viewBox="0 0 400 400">
+                <!-- Roads -->
+                <path class="road-path dark-road" d="M 0,100 L 400,100" />
+                <path class="road-path dark-road" d="M 0,300 L 400,300" />
+                <path class="road-path dark-road" d="M 100,0 L 100,400" />
+                <path class="road-path dark-road" d="M 300,0 L 300,400" />
+                <path class="road-path route-line active-route" d="M 100,300 L 100,100 L 300,100" />
+                
+                <!-- Markers -->
+                <circle cx="100" cy="300" r="8" fill="#0ea5e9" stroke="#ffffff" stroke-width="2" />
+                <circle cx="300" cy="100" r="8" fill="#ef4444" stroke="#ffffff" stroke-width="2" />
+              </svg>
+            </div>
+
+            <!-- Request Details Container -->
+            <div class="request-details-card">
+              <div class="trip-locations">
+                <p>📍 <strong>Pickup:</strong> 123 Main St</p>
+                <p>🏁 <strong>Drop-off:</strong> 456 Broadway Ave</p>
+                <p class="trip-distance-metadata">📐 Distance: 4.2 miles (Estimated 12 mins)</p>
+              </div>
+
+              <div class="driver-passenger-budget-card">
+                <span class="budget-label">PASSENGER MAX BUDGET</span>
+                <span class="budget-value font-outfit" id="d-request-budget">$15.00</span>
+              </div>
+
+              <!-- HUD Bidding buttons -->
+              <div class="bidding-hud-actions">
+                <button class="hud-bid-btn primary-bid-btn" id="d-bid-match-btn">
+                  <span class="bid-action-lbl">Match Budget</span>
+                  <span class="bid-action-price font-outfit" id="d-bid-match-val">$15.00</span>
+                </button>
+
+                <div class="hud-bid-row-alternatives">
+                  <button class="hud-bid-btn alternative-bid-btn" id="d-bid-mid-btn">
+                    <span class="bid-action-lbl">Suggest</span>
+                    <span class="bid-action-price font-outfit" id="d-bid-mid-val">$17.50</span>
+                  </button>
+                  <button class="hud-bid-btn alternative-bid-btn" id="d-bid-high-btn">
+                    <span class="bid-action-lbl">Suggest</span>
+                    <span class="bid-action-price font-outfit" id="d-bid-high-val">$20.00</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="decline-request-link" id="d-decline-request-btn">Decline Request</div>
+            </div>
+          </div>
+
+          <!-- DRIVER VIEW: RIDE ACTIVE / PICKUP -->
+          <div class="view" id="d-view-ride-active">
+            <div class="app-header">
+              <span class="app-title font-outfit" id="d-ride-action-title">Navigate to Pickup</span>
+              <div class="driver-emergency-btn">SOS</div>
+            </div>
+
+            <!-- Active Map -->
+            <div class="map-container tracking-map">
+              <svg class="svg-map dark-map" viewBox="0 0 400 400" id="driver-active-map">
+                <!-- Roads -->
+                <path class="road-path dark-road" d="M 0,100 L 400,100" />
+                <path class="road-path dark-road" d="M 0,300 L 400,300" />
+                <path class="road-path dark-road" d="M 100,0 L 100,400" />
+                <path class="road-path dark-road" d="M 300,0 L 300,400" />
+                <path class="road-path route-line active-route" id="d-route-polyline" d="M 100,300 L 100,100 L 300,100" />
+                
+                <!-- Markers -->
+                <circle cx="100" cy="300" r="8" fill="#0ea5e9" stroke="#ffffff" stroke-width="2" />
+                <circle cx="300" cy="100" r="8" fill="#ef4444" stroke="#ffffff" stroke-width="2" />
+                <g class="car-marker" id="d-car-marker" transform="translate(100,300)">
+                  <circle cx="0" cy="0" r="10" fill="#10b981" stroke="#ffffff" stroke-width="2" />
+                  <path d="M-4,-2 L4,-2 L0,-7 Z" fill="#ffffff" />
+                </g>
+              </svg>
+              <div class="map-overlay-banner" id="d-active-trip-banner">
+                Distance to Pickup: 0.5 miles
+              </div>
+            </div>
+
+            <!-- Active Ride Bottom Sheet -->
+            <div class="bottom-sheet driver-sheet">
+              <!-- Passenger Details -->
+              <div class="passenger-card-summary">
+                <div class="passenger-avatar">👨🏻</div>
+                <div class="passenger-details-block">
+                  <h3 class="font-outfit">Jane Doe</h3>
+                  <p class="passenger-rating">⭐ 4.8 &bull; Pickup: 123 Main St</p>
+                </div>
+                <div class="ride-price-badge font-outfit" id="d-ride-price-badge">$15.00</div>
+              </div>
+
+              <!-- Arrived Button State -->
+              <button class="primary-btn driver-btn font-outfit" id="d-arrived-btn">I Have Arrived</button>
+              
+              <!-- OTP Entry Form (Initially hidden) -->
+              <div class="driver-otp-form" id="d-otp-form" style="display: none;">
+                <span class="otp-form-lbl">ENTER PASSENGER OTP</span>
+                <div class="otp-input-row">
+                  <input type="text" maxlength="1" class="otp-digit-input" id="d-otp-1" />
+                  <input type="text" maxlength="1" class="otp-digit-input" id="d-otp-2" />
+                  <input type="text" maxlength="1" class="otp-digit-input" id="d-otp-3" />
+                  <input type="text" maxlength="1" class="otp-digit-input" id="d-otp-4" />
+                </div>
+                <button class="primary-btn driver-btn font-outfit" id="d-verify-otp-btn">Verify OTP & Start Ride</button>
+              </div>
+
+              <!-- Complete Ride Button (Initially hidden) -->
+              <button class="primary-btn driver-btn font-outfit" id="d-complete-btn" style="display: none; background-color: #ef4444;">Complete Ride</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Notification Banner -->
+  <div class="toast-notification" id="toast-notif">
+    <span id="toast-message">Notification details here</span>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

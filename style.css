@@ -1,0 +1,1496 @@
+/* ==========================================================================
+   DESIGN TOKENS & ROOT VARIABLES
+   ========================================================================== */
+:root {
+  /* Brand Shared */
+  --font-outfit: 'Outfit', sans-serif;
+  --font-inter: 'Inter', sans-serif;
+  
+  --brand-navy: #1e1b4b;
+  --brand-error: #ef4444;
+  --brand-error-bg: rgba(239, 68, 68, 0.1);
+  --brand-success: #10b981;
+  --brand-success-bg: rgba(16, 185, 129, 0.15);
+  
+  /* Passenger Accent (Sky Blue) */
+  --pass-primary: #0ea5e9;
+  --pass-primary-rgb: 14, 165, 233;
+  --pass-bg-base: #f1f5f9;
+  --pass-bg-card: #ffffff;
+  --pass-text-dark: #0f172a;
+  --pass-text-muted: #64748b;
+  --pass-shadow: 0 10px 25px -5px rgba(14, 165, 233, 0.12), 0 8px 10px -6px rgba(14, 165, 233, 0.08);
+
+  /* Driver Accent (Emerald Green) */
+  --driver-primary: #10b981;
+  --driver-primary-rgb: 16, 185, 129;
+  --driver-bg-base: #0f172a;
+  --driver-bg-card: #1e293b;
+  --driver-text-light: #ffffff;
+  --driver-text-muted: #94a3b8;
+  --driver-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.15), 0 8px 10px -6px rgba(16, 185, 129, 0.08);
+
+  /* Global Animations */
+  --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-std: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ==========================================================================
+   BASE STYLING & CORE LAYOUT
+   ========================================================================== */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-family: var(--font-inter);
+  background-color: #0b0f19;
+  color: #f8fafc;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  overflow-x: hidden;
+  padding-bottom: 40px;
+}
+
+.font-outfit {
+  font-family: var(--font-outfit);
+}
+
+/* Custom background glow spots */
+.glow {
+  position: absolute;
+  width: 500px;
+  height: 500px;
+  border-radius: 50%;
+  filter: blur(150px);
+  opacity: 0.15;
+  pointer-events: none;
+  z-index: -1;
+}
+.glow-blue {
+  background-color: var(--pass-primary);
+  top: -100px;
+  left: -100px;
+}
+.glow-green {
+  background-color: var(--driver-primary);
+  bottom: -100px;
+  right: -100px;
+}
+
+/* Dashboard Header */
+.app-dashboard-header {
+  width: 100%;
+  max-width: 1100px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.logo-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.logo-icon {
+  width: 44px;
+  height: 44px;
+  background: linear-gradient(135deg, var(--pass-primary), var(--driver-primary));
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-outfit);
+  font-size: 24px;
+  font-weight: 800;
+  color: white;
+  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
+}
+.logo-text h1 {
+  font-family: var(--font-outfit);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.logo-text p {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.system-status {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #94a3b8;
+  background-color: rgba(255, 255, 255, 0.03);
+  padding: 6px 12px;
+  border-radius: 100px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  background-color: var(--brand-success);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--brand-success);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(0.9); opacity: 0.5; }
+  50% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.5; }
+}
+
+.reset-btn {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: var(--brand-error);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+.reset-btn:hover {
+  background-color: rgba(239, 68, 68, 0.2);
+}
+
+/* ==========================================================================
+   SIMULATOR LAYOUT & SMARTPHONE FRAMES
+   ========================================================================== */
+.simulator-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 60px;
+  width: 100%;
+  max-width: 1200px;
+  padding: 20px;
+}
+
+.device-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.device-label {
+  font-family: var(--font-outfit);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #64748b;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 6px 16px;
+  border-radius: 6px;
+}
+
+.passenger-theme .device-label {
+  border-left: 3px solid var(--pass-primary);
+  color: var(--pass-primary);
+}
+.driver-theme .device-label {
+  border-left: 3px solid var(--driver-primary);
+  color: var(--driver-primary);
+}
+
+/* Phone Body Mockup */
+.smartphone-frame {
+  width: 360px;
+  height: 740px;
+  border-radius: 44px;
+  background-color: #1e293b;
+  border: 10px solid #0f172a;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6), 0 0 0 2px rgba(255, 255, 255, 0.05);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Screen container inside phone */
+.screen-content {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  font-family: var(--font-inter);
+}
+
+/* iPhone-style top notch */
+.screen-notch {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 140px;
+  height: 24px;
+  background-color: #0f172a;
+  border-bottom-left-radius: 16px;
+  border-bottom-right-radius: 16px;
+  z-index: 100;
+}
+
+/* View controllers */
+.view {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.98);
+  transition: opacity var(--transition-std), transform var(--transition-std);
+  padding-top: 30px; /* Space for notch */
+}
+.view.active {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1);
+  z-index: 10;
+}
+
+/* Header inside apps */
+.app-header {
+  height: 56px;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 20;
+}
+.app-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+/* Bottom Nav bar */
+.bottom-nav {
+  height: 64px;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  flex-shrink: 0;
+  z-index: 20;
+}
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 11px;
+  color: #94a3b8;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+/* Buttons */
+.primary-btn {
+  width: 100%;
+  height: 48px;
+  border-radius: 100px;
+  border: none;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-fast);
+}
+.primary-btn:active {
+  transform: scale(0.97);
+}
+
+/* ==========================================================================
+   PASSENGER MOBILE APP STYLING (LIGHT THEME)
+   ========================================================================== */
+.passenger-theme .smartphone-frame {
+  background-color: var(--pass-bg-base);
+}
+
+.passenger-theme .screen-content {
+  background-color: var(--pass-bg-base);
+  color: var(--pass-text-dark);
+}
+
+.passenger-theme .app-header {
+  background-color: var(--pass-bg-card);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.03);
+}
+
+.passenger-theme .app-title {
+  color: var(--pass-text-dark);
+}
+
+.passenger-theme .header-avatar {
+  width: 32px;
+  height: 32px;
+  background-color: var(--pass-primary-light);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--pass-primary);
+}
+
+/* Map experience */
+.map-container {
+  flex-grow: 1;
+  position: relative;
+  overflow: hidden;
+  background-color: #e2e8f0;
+}
+.svg-map {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.road-path {
+  fill: none;
+  stroke: #cbd5e1;
+  stroke-width: 24px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.route-line {
+  stroke: var(--pass-primary);
+  stroke-width: 8px;
+  stroke-dasharray: 6 6;
+  animation: routeDash 30s linear infinite;
+}
+@keyframes routeDash {
+  to { stroke-dashoffset: -200; }
+}
+
+.map-pin {
+  stroke: #ffffff;
+  stroke-width: 2.5px;
+  filter: drop-shadow(0 4px 6px rgba(0,0,0,0.15));
+}
+.passenger-pin {
+  fill: var(--pass-primary);
+}
+.dropoff-pin {
+  fill: var(--brand-error);
+}
+
+/* Dynamic Map banner */
+.map-overlay-banner {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: var(--pass-bg-card);
+  padding: 8px 16px;
+  border-radius: 100px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  white-space: nowrap;
+  z-index: 50;
+  border: 1px solid rgba(0,0,0,0.03);
+}
+
+/* Passenger drawer sheets */
+.bottom-sheet {
+  background-color: var(--pass-bg-card);
+  border-top-left-radius: 24px;
+  border-top-right-radius: 24px;
+  padding: 20px;
+  box-shadow: 0 -10px 25px -5px rgba(0,0,0,0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 30;
+}
+.sheet-handle {
+  width: 40px;
+  height: 4px;
+  background-color: #cbd5e1;
+  border-radius: 2px;
+  align-self: center;
+  margin-bottom: 4px;
+}
+.sheet-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--pass-text-dark);
+}
+
+/* Address Fields */
+.address-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background-color: var(--pass-bg-base);
+  padding: 12px;
+  border-radius: 16px;
+}
+.address-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.dot-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.green-dot { background-color: var(--pass-primary); box-shadow: 0 0 6px var(--pass-primary); }
+.red-dot { background-color: var(--brand-error); box-shadow: 0 0 6px var(--brand-error); }
+.address-row input {
+  background: none;
+  border: none;
+  width: 100%;
+  font-size: 13.5px;
+  font-family: var(--font-inter);
+  color: var(--pass-text-dark);
+  font-weight: 500;
+  outline: none;
+}
+
+/* Category Tabs */
+.category-tabs {
+  display: flex;
+  gap: 12px;
+}
+.category-tab {
+  flex: 1;
+  background-color: var(--pass-bg-base);
+  padding: 12px;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+.category-tab:hover {
+  background-color: #e2e8f0;
+}
+.category-tab.active {
+  background-color: var(--pass-primary-light);
+  border: 1px solid rgba(14, 165, 233, 0.2);
+}
+.cat-icon {
+  font-size: 22px;
+}
+.cat-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pass-text-dark);
+}
+
+/* Budget UI */
+.budget-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.budget-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pass-text-muted);
+}
+.budget-val {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--pass-primary);
+}
+.budget-slider {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 6px;
+  background: #cbd5e1;
+  border-radius: 3px;
+  outline: none;
+}
+.budget-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--pass-primary);
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(14, 165, 233, 0.3);
+  transition: var(--transition-fast);
+}
+.budget-slider::-webkit-slider-thumb:active {
+  transform: scale(1.2);
+}
+.budget-gauge {
+  background-color: var(--brand-success-bg);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  padding: 8px 12px;
+  border-radius: 8px;
+  display: flex;
+  justify-content: center;
+  transition: var(--transition-std);
+}
+.gauge-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--brand-success);
+}
+.budget-gauge.low-chance {
+  background-color: var(--brand-error-bg);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+.budget-gauge.low-chance .gauge-label {
+  color: var(--brand-error);
+}
+
+.passenger-btn {
+  background-color: var(--pass-primary);
+  color: white;
+  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.25);
+}
+.passenger-btn:hover {
+  background-color: #0284c7;
+}
+
+.passenger-theme .bottom-nav {
+  background-color: var(--pass-bg-card);
+}
+.passenger-theme .nav-item.active {
+  color: var(--pass-primary);
+}
+
+/* ==========================================================================
+   PASSENGER: LIVE BIDDING ROOM VIEW
+   ========================================================================== */
+.radar-section {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  gap: 16px;
+}
+.radar-pulse-container {
+  width: 120px;
+  height: 120px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.radar-pulse {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background-color: rgba(14, 165, 233, 0.15);
+  transform: scale(0.6);
+  opacity: 1;
+}
+.pulse-1 { animation: radarGlow 2.5s infinite linear; }
+.pulse-2 { animation: radarGlow 2.5s infinite linear 0.8s; }
+.pulse-3 { animation: radarGlow 2.5s infinite linear 1.6s; }
+
+@keyframes radarGlow {
+  0% { transform: scale(0.5); opacity: 1; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+.radar-avatar {
+  width: 50px;
+  height: 50px;
+  background-color: var(--pass-primary);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 22px;
+  font-weight: 800;
+  box-shadow: 0 0 16px rgba(14, 165, 233, 0.4);
+  z-index: 5;
+}
+.radar-status-text {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--pass-text-dark);
+}
+.radar-route-details {
+  font-size: 12.5px;
+  color: var(--pass-text-muted);
+  font-weight: 500;
+}
+
+/* Bid listings */
+.bids-section {
+  height: 250px;
+  background-color: var(--pass-bg-card);
+  border-top-left-radius: 24px;
+  border-top-right-radius: 24px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex-shrink: 0;
+  box-shadow: 0 -10px 25px rgba(0,0,0,0.03);
+}
+.bids-sorting-tabs {
+  display: flex;
+  gap: 8px;
+}
+.sort-chip {
+  padding: 6px 12px;
+  background-color: var(--pass-bg-base);
+  color: var(--pass-text-muted);
+  border-radius: 100px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+.sort-chip.active {
+  background-color: var(--pass-primary);
+  color: white;
+}
+.bids-list {
+  flex-grow: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 10px;
+}
+
+.empty-bids-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  font-size: 12px;
+  color: var(--pass-text-muted);
+  padding: 0 20px;
+}
+
+/* Bid list cards */
+.bid-card {
+  display: flex;
+  align-items: center;
+  background-color: var(--pass-bg-base);
+  padding: 12px;
+  border-radius: 16px;
+  gap: 12px;
+  animation: slideInUp var(--transition-std) forwards;
+  transition: var(--transition-fast);
+}
+.bid-card.best-value-highlight {
+  background-color: var(--pass-primary-light);
+  border: 1px solid rgba(14, 165, 233, 0.2);
+}
+
+@keyframes slideInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.bid-driver-pic {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+.bid-details {
+  flex-grow: 1;
+}
+.bid-driver-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--pass-text-dark);
+}
+.bid-car-info {
+  font-size: 11px;
+  color: var(--pass-text-muted);
+}
+.bid-eta {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--pass-primary);
+  margin-top: 2px;
+}
+.bid-price-action {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+}
+.bid-amount {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--pass-text-dark);
+}
+.accept-bid-btn {
+  background-color: var(--pass-primary);
+  color: white;
+  border: none;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 100px;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+.accept-bid-btn:hover {
+  background-color: #0284c7;
+}
+
+.cancel-request-btn {
+  height: 48px;
+  border: none;
+  background-color: var(--pass-bg-card);
+  color: var(--brand-error);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* ==========================================================================
+   PASSENGER: ACTIVE RIDE / OTP VIEW
+   ========================================================================== */
+.emergency-sos-btn {
+  background-color: var(--brand-error);
+  color: white;
+  border-radius: 100px;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.alert-banner {
+  background-color: var(--brand-error);
+  color: white;
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
+}
+
+.active-ride-card {
+  background-color: var(--pass-bg-card);
+  border-top-left-radius: 24px;
+  border-top-right-radius: 24px;
+  padding: 20px;
+  box-shadow: 0 -10px 25px rgba(0,0,0,0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex-shrink: 0;
+  z-index: 30;
+}
+
+/* OTP Container Box */
+.otp-container {
+  background-color: #0f172a;
+  padding: 12px;
+  border-radius: 16px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.otp-label {
+  font-size: 9px;
+  color: #94a3b8;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+.otp-number {
+  font-size: 26px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.2em;
+}
+
+.driver-profile-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background-color: var(--pass-bg-base);
+  padding: 12px;
+  border-radius: 16px;
+}
+.driver-pic {
+  font-size: 32px;
+}
+.driver-details {
+  flex-grow: 1;
+}
+.driver-details h3 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--pass-text-dark);
+}
+.driver-rating {
+  font-size: 11px;
+  color: var(--pass-text-muted);
+}
+.driver-plate {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--pass-text-dark);
+  margin-top: 2px;
+}
+.driver-actions {
+  display: flex;
+  gap: 8px;
+}
+.circle-action-btn {
+  width: 36px;
+  height: 36px;
+  background-color: var(--pass-primary-light);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 16px;
+  transition: var(--transition-fast);
+}
+.circle-action-btn:hover {
+  background-color: #e0f2fe;
+}
+
+.active-ride-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.cancel-ride-link {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--pass-text-muted);
+  cursor: pointer;
+}
+.cancel-ride-link:hover {
+  color: var(--brand-error);
+}
+.ride-category-pill {
+  background-color: var(--pass-primary-light);
+  color: var(--pass-primary);
+  font-family: var(--font-outfit);
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 100px;
+}
+
+/* ==========================================================================
+   PASSENGER: RATING SCREEN
+   ========================================================================== */
+.rating-container {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+  gap: 20px;
+}
+.success-icon {
+  font-size: 56px;
+}
+.rating-headline {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--pass-text-dark);
+}
+.rating-sub {
+  font-size: 14px;
+  color: var(--pass-text-muted);
+  text-align: center;
+}
+.stars-row {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0;
+}
+.star {
+  font-size: 36px;
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+.star.hover, .star.selected {
+  color: #eab308;
+  transform: scale(1.1);
+}
+.feedback-textarea {
+  width: 100%;
+  height: 90px;
+  border-radius: 12px;
+  border: 1px solid #cbd5e1;
+  padding: 12px;
+  font-family: var(--font-inter);
+  font-size: 13px;
+  resize: none;
+  outline: none;
+  background-color: var(--pass-bg-card);
+  color: var(--pass-text-dark);
+}
+.feedback-textarea:focus {
+  border-color: var(--pass-primary);
+}
+
+/* ==========================================================================
+   DRIVER MOBILE APP STYLING (DARK THEME)
+   ========================================================================== */
+.driver-theme .smartphone-frame {
+  background-color: var(--driver-bg-base);
+}
+
+.driver-theme .screen-content {
+  background-color: var(--driver-bg-base);
+  color: var(--driver-text-light);
+}
+
+.driver-theme .app-header {
+  background-color: var(--driver-bg-card);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.driver-theme .app-title {
+  color: var(--driver-text-light);
+}
+
+/* Status Badges */
+.driver-status-badge {
+  padding: 4px 10px;
+  border-radius: 100px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+.offline-badge {
+  background-color: rgba(148, 163, 184, 0.1);
+  color: var(--driver-text-muted);
+}
+.online-badge {
+  background-color: var(--brand-success-bg);
+  color: var(--driver-primary);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
+}
+
+/* Offline Hero Card */
+.offline-hero-card {
+  flex-grow: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+/* Go Online Slide Switch */
+.online-slider-container {
+  width: 100%;
+  max-width: 300px;
+}
+.online-slider-track {
+  width: 100%;
+  height: 56px;
+  background-color: var(--driver-bg-card);
+  border-radius: 100px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+}
+.slider-text {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--driver-text-muted);
+  user-select: none;
+  pointer-events: none;
+}
+.online-slider-thumb {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 48px;
+  height: 48px;
+  background-color: var(--driver-primary);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: grab;
+  box-shadow: 0 4px 10px rgba(16, 185, 129, 0.4);
+  transition: background-color var(--transition-fast);
+}
+.online-slider-thumb:active {
+  cursor: grabbing;
+}
+
+/* Driver Stats dashboard list */
+.stats-container {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.stat-card {
+  background-color: var(--driver-bg-card);
+  padding: 16px;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid rgba(255,255,255,0.02);
+}
+.stat-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--driver-text-muted);
+  letter-spacing: 0.08em;
+}
+.stat-val {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--driver-text-light);
+  transition: filter var(--transition-std);
+}
+.stat-val.locked-stat {
+  filter: blur(4px);
+}
+
+.stat-grid-row {
+  display: flex;
+  gap: 12px;
+}
+.half-card {
+  flex: 1;
+}
+
+.balance-card {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
+.cashout-btn {
+  background-color: var(--driver-primary);
+  color: white;
+  border: none;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 8px 16px;
+  border-radius: 100px;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(16, 185, 129, 0.2);
+  transition: var(--transition-fast);
+}
+.cashout-btn.disabled {
+  background-color: #334155;
+  color: #64748b;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Sparkline canvas graph */
+.sparkline-container {
+  height: 30px;
+  margin-top: 8px;
+}
+.sparkline-svg {
+  width: 100%;
+  height: 100%;
+}
+.sparkline-path {
+  fill: none;
+  stroke: var(--driver-primary);
+  stroke-width: 2.5px;
+  stroke-linecap: round;
+}
+
+.driver-theme .bottom-nav {
+  background-color: var(--driver-bg-card);
+  border-top: 1px solid rgba(255, 255, 255, 0.03);
+}
+.driver-theme .nav-item.active {
+  color: var(--driver-primary);
+}
+
+/* ==========================================================================
+   DRIVER: ONLINE VIEW (SEARCHING)
+   ========================================================================== */
+.go-offline-btn {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: var(--brand-error);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 100px;
+  cursor: pointer;
+  border: 1px solid rgba(239, 68, 68, 0.15);
+}
+
+.dark-map .road-path.dark-road {
+  stroke: #1e293b;
+}
+
+/* Radar Sweep effect on driver map */
+.radar-sweep {
+  fill: rgba(16, 185, 129, 0.03);
+  stroke: rgba(16, 185, 129, 0.2);
+  stroke-width: 1px;
+  animation: sweep 4s infinite linear;
+  transform-origin: 100px 300px;
+}
+@keyframes sweep {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.green-banner {
+  background-color: var(--driver-primary);
+  color: white;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+}
+
+.online-stats-overlay {
+  background-color: var(--driver-bg-card);
+  display: flex;
+  justify-content: space-around;
+  padding: 14px;
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.03);
+  z-index: 30;
+}
+.online-stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.online-stat-lbl {
+  font-size: 9px;
+  color: var(--driver-text-muted);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+.online-stat-num {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--driver-text-light);
+}
+
+/* ==========================================================================
+   DRIVER: QUICK BID CONSOLE (ACTIVE CONSOLE)
+   ========================================================================== */
+.countdown-bar-container {
+  width: 100%;
+  height: 4px;
+  background-color: #334155;
+  position: absolute;
+  top: 30px;
+  left: 0;
+  z-index: 50;
+}
+.countdown-progress-bar {
+  height: 100%;
+  width: 100%;
+  background-color: var(--driver-primary);
+  transition: width 1s linear;
+}
+.compact-header {
+  border-bottom: none !important;
+}
+.timer-countdown {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--driver-primary);
+  background-color: var(--brand-success-bg);
+  padding: 2px 8px;
+  border-radius: 100px;
+}
+
+.compact-map {
+  height: 160px;
+  flex-grow: 0;
+}
+.active-route {
+  stroke: var(--driver-primary) !important;
+  stroke-dasharray: none;
+}
+
+.request-details-card {
+  background-color: var(--driver-bg-card);
+  border-top-left-radius: 24px;
+  border-top-right-radius: 24px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex-grow: 1;
+  box-shadow: 0 -10px 25px rgba(0,0,0,0.15);
+  border-top: 1px solid rgba(255, 255, 255, 0.03);
+}
+.trip-locations {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--driver-text-light);
+}
+.trip-distance-metadata {
+  font-size: 11px;
+  color: var(--driver-text-muted);
+  margin-top: 4px;
+}
+
+.driver-passenger-budget-card {
+  background-color: rgba(255, 255, 255, 0.02);
+  border: 1.5px dashed rgba(16, 185, 129, 0.2);
+  padding: 12px;
+  border-radius: 16px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.budget-label {
+  font-size: 9px;
+  color: var(--driver-text-muted);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.budget-value {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--driver-primary);
+}
+
+/* Bidding HUD actions */
+.bidding-hud-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.hud-bid-btn {
+  border: none;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  transition: var(--transition-fast);
+}
+.hud-bid-btn:active {
+  transform: scale(0.97);
+}
+.primary-bid-btn {
+  height: 64px;
+  background-color: var(--driver-primary);
+  color: white;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+}
+.primary-bid-btn:hover {
+  background-color: #059669;
+}
+.hud-bid-row-alternatives {
+  display: flex;
+  gap: 10px;
+}
+.alternative-bid-btn {
+  flex: 1;
+  height: 56px;
+  background-color: rgba(255, 255, 255, 0.03);
+  color: var(--driver-primary);
+  border: 1.5px solid rgba(16, 185, 129, 0.15);
+}
+.alternative-bid-btn:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.bid-action-lbl {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  opacity: 0.8;
+}
+.bid-action-price {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.decline-request-link {
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--driver-text-muted);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  padding: 6px;
+}
+.decline-request-link:hover {
+  color: var(--brand-error);
+}
+
+/* ==========================================================================
+   DRIVER: ACTIVE TRIP STYLING
+   ========================================================================== */
+.driver-emergency-btn {
+  background-color: var(--brand-error);
+  color: white;
+  padding: 4px 10px;
+  border-radius: 100px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.driver-sheet {
+  background-color: var(--driver-bg-card) !important;
+  box-shadow: 0 -10px 25px rgba(0,0,0,0.3) !important;
+}
+
+.passenger-card-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background-color: rgba(255, 255, 255, 0.02);
+  padding: 12px;
+  border-radius: 16px;
+}
+.passenger-avatar {
+  font-size: 28px;
+}
+.passenger-details-block {
+  flex-grow: 1;
+}
+.passenger-details-block h3 {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--driver-text-light);
+}
+.passenger-rating {
+  font-size: 11px;
+  color: var(--driver-text-muted);
+}
+.ride-price-badge {
+  background-color: var(--brand-success-bg);
+  color: var(--driver-primary);
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 100px;
+  font-size: 13px;
+}
+
+.driver-btn {
+  background-color: var(--driver-primary);
+  color: white;
+  box-shadow: 0 4px 10px rgba(16, 185, 129, 0.25);
+}
+.driver-btn:hover {
+  background-color: #059669;
+}
+
+/* OTP Entry fields inside driver app */
+.driver-otp-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+}
+.otp-form-lbl {
+  font-size: 9px;
+  color: var(--driver-text-muted);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+.otp-input-row {
+  display: flex;
+  gap: 10px;
+}
+.otp-digit-input {
+  width: 44px;
+  height: 48px;
+  border-radius: 10px;
+  border: 1.5px solid #475569;
+  background-color: var(--driver-bg-base);
+  color: white;
+  text-align: center;
+  font-family: var(--font-outfit);
+  font-size: 20px;
+  font-weight: 700;
+  outline: none;
+}
+.otp-digit-input:focus {
+  border-color: var(--driver-primary);
+  background-color: var(--driver-bg-card);
+}
+
+/* ==========================================================================
+   GLOBAL APP TOAST NOTIFICATIONS
+   ========================================================================== */
+.toast-notification {
+  position: fixed;
+  bottom: 24px;
+  background-color: #0f172a;
+  color: white;
+  padding: 12px 24px;
+  border-radius: 100px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transform: translateY(100px);
+  opacity: 0;
+  transition: transform var(--transition-std), opacity var(--transition-std);
+  pointer-events: none;
+  z-index: 1000;
+}
+.toast-notification.active {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+/* ==========================================================================
+   CAR MARKER STYLING
+   ========================================================================== */
+.car-marker {
+  transition: transform 1s linear;
+}
