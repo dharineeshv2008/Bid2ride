@@ -9,7 +9,7 @@
     "frontend/admin"
   ],
   "scripts": {
-    "build": "npm run build --prefix frontend/landing && npm run build --prefix frontend/passenger && npm run build --prefix frontend/driver && npm run build --prefix frontend/admin"
+    "build": "npm run build --workspaces"
   },
   "devDependencies": {
     "typescript": "^5.5.3",
