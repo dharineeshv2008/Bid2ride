@@ -2,7 +2,18 @@
   "name": "bid2ride-monorepo",
   "private": true,
   "version": "1.0.0",
+  "workspaces": [
+    "frontend/landing",
+    "frontend/passenger",
+    "frontend/driver",
+    "frontend/admin"
+  ],
   "scripts": {
     "build": "npm run build --prefix frontend/landing && npm run build --prefix frontend/passenger && npm run build --prefix frontend/driver && npm run build --prefix frontend/admin"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.3",
+    "vite": "^5.4.3",
+    "@types/node": "^22.5.4"
   }
 }
