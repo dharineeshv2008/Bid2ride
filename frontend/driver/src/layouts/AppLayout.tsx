@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useSocket } from '../contexts/SocketContext';
 import { 
   Car, 
   Radio, 
@@ -18,6 +19,21 @@ export const AppLayout: React.FC = () => {
   const { user, driverProfile, toggleOnlineStatus, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const { socket } = useSocket();
+
+  useEffect(() => {
+    if (socket) {
+      const handleBidAccepted = (data: { assignment_id: string }) => {
+        navigate(`/active/${data.assignment_id}`);
+      };
+
+      socket.on('bid_accepted', handleBidAccepted);
+
+      return () => {
+        socket.off('bid_accepted', handleBidAccepted);
+      };
+    }
+  }, [socket, navigate]);
 
   const handleLogout = async () => {
     await logout();

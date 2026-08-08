@@ -163,6 +163,12 @@ class AuthService:
                 role=role,
             )
             await self.session.flush()
+        else:
+            if role and user.role != role:
+                user.role = role
+                await self.session.flush()
+
+        await self._ensure_driver_and_wallet_records(user)
 
         access_token = create_access_token(subject=user.id, role=user.role)
 
@@ -225,10 +231,12 @@ class AuthService:
                 role=role,
             )
             await self.session.flush()
-        elif user.role != role:
-            raise AuthenticationException(
-                f"Phone number is already registered as {user.role}. Use a different number or role."
-            )
+        else:
+            if role and user.role != role:
+                user.role = role
+                await self.session.flush()
+
+        await self._ensure_driver_and_wallet_records(user)
 
         # Issue standard JWT credentials (identical to production flow)
         access_token = create_access_token(subject=user.id, role=user.role)
@@ -340,6 +348,12 @@ class AuthService:
                 role=role,
             )
             await self.session.flush()
+        else:
+            if role and user.role != role:
+                user.role = role
+                await self.session.flush()
+
+        await self._ensure_driver_and_wallet_records(user)
 
         # Generate tokens
         access_token = create_access_token(subject=user.id, role=user.role)
@@ -355,6 +369,63 @@ class AuthService:
         await self.session.commit()
 
         return access_token, refresh_token, user
+
+    async def _ensure_driver_and_wallet_records(self, user: User) -> None:
+        """Ensures Driver and Wallet database records exist for the authenticated user."""
+        from app.models.driver import Driver, Vehicle
+        from app.models.payment import Wallet
+        from app.repositories.payment_repository import WalletRepository
+        
+        wallet_repo = WalletRepository(self.session)
+        wallet = await wallet_repo.get_by_user_id(user.id)
+        if not wallet:
+            await wallet_repo.create({
+                "user_id": user.id,
+                "balance": 500.0 if settings.DEVELOPMENT_MODE else 0.0,
+                "currency": "INR"
+            })
+            await self.session.flush()
+
+        if user.role == "DRIVER":
+            driver_stmt = select(Driver).where(Driver.id == user.id)
+            driver_res = await self.session.execute(driver_stmt)
+            driver = driver_res.scalars().first()
+            if not driver:
+                import random
+                driver = Driver(
+                    id=user.id,
+                    license_number=f"DL-{random.randint(100000, 999999)}",
+                    verification_status="APPROVED" if settings.DEVELOPMENT_MODE else "PENDING",
+                    rating=5.0,
+                    rating_count=0,
+                    online_status=False,
+                    acceptance_rate=100.0,
+                    win_rate=100.0
+                )
+                self.session.add(driver)
+                await self.session.flush()
+
+            if not driver.active_vehicle_id and settings.DEVELOPMENT_MODE:
+                import random
+                veh_stmt = select(Vehicle).where(Vehicle.driver_id == user.id)
+                veh_res = await self.session.execute(veh_stmt)
+                vehicles = veh_res.scalars().all()
+                if not vehicles:
+                    vehicle = Vehicle(
+                        driver_id=user.id,
+                        make="Toyota",
+                        model="Camry",
+                        year=2022,
+                        color="White",
+                        plate_number=f"KA-01-MJ-{random.randint(1000, 9999)}",
+                        category="ECONOMY",
+                        status="ACTIVE"
+                    )
+                    self.session.add(vehicle)
+                    await self.session.flush()
+                    driver.active_vehicle_id = vehicle.id
+                else:
+                    driver.active_vehicle_id = vehicles[0].id
 
     async def _update_last_login(self, user: User) -> None:
         from app.models.user import UserSettings

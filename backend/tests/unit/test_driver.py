@@ -113,6 +113,7 @@ def test_register_vehicle_api(mock_drv_service_class: MagicMock, mock_veh_servic
 # 3. AVAILABILITY TRANSITION CONSTRAINT TESTS
 # =====================================================================
 
+@patch("app.api.v1.endpoints.drivers.settings.DEVELOPMENT_MODE", False)
 @patch("app.api.v1.endpoints.drivers.DriverService", autospec=True)
 def test_toggle_online_availability_denied_if_unverified(mock_service_class: MagicMock) -> None:
     """Verifies that unverified drivers are blocked from going online."""

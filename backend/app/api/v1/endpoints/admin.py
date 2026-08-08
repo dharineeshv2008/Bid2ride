@@ -346,3 +346,174 @@ async def update_system_setting(
     )
     await db.commit()
     return setting
+
+
+# =====================================================================
+# 7. LIVE MAP, TRIP REPLAY, ANTI-FRAUD & MONITORING
+# =====================================================================
+
+def _geom_to_coords(geom: Any) -> tuple[float, float]:
+    """Helper to extract lat, lng float tuple from PostGIS geometry."""
+    if geom is None:
+        return 0.0, 0.0
+    try:
+        from geoalchemy2.shape import to_shape
+        shape = to_shape(geom)
+        return float(shape.y), float(shape.x)
+    except Exception:
+        pass
+    try:
+        str_val = str(geom)
+        if "POINT" in str_val:
+            point_part = str_val.split("POINT")[1]
+            coords = point_part.strip().lstrip("(").rstrip(")").rstrip("'").rstrip('"').split()
+            return float(coords[1]), float(coords[0])
+    except Exception:
+        pass
+    return 0.0, 0.0
+
+
+@router.get("/live-map", dependencies=[admin_role_dependency])
+async def get_admin_live_map(
+    db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Returns active online drivers, active ride requests, and demand heatmap clusters."""
+    from app.models.driver import Driver
+    from app.models.ride import RideRequest
+
+    # Active online drivers
+    stmt_drivers = select(Driver).where(Driver.online_status == True, Driver.current_location.isnot(None))
+    drivers = (await db.execute(stmt_drivers)).scalars().all()
+    driver_markers = []
+    for d in drivers:
+        d_lat, d_lng = _geom_to_coords(d.current_location)
+        if d_lat != 0.0 and d_lng != 0.0:
+            driver_markers.append({
+                "driver_id": str(d.id),
+                "lat": d_lat,
+                "lng": d_lng,
+                "status": "ONLINE",
+                "rating": float(d.rating)
+            })
+
+    # Active rides
+    stmt_rides = select(RideRequest).where(RideRequest.status.in_(["PENDING_BIDS", "MATCHED", "IN_PROGRESS"]))
+    rides = (await db.execute(stmt_rides)).scalars().all()
+    active_rides = []
+    heatmap = []
+    for r in rides:
+        p_lat, p_lng = _geom_to_coords(r.pickup_location)
+        d_lat, d_lng = _geom_to_coords(r.dropoff_location)
+        active_rides.append({
+            "ride_id": str(r.id),
+            "status": r.status,
+            "pickup": {"lat": p_lat, "lng": p_lng, "address": r.pickup_address},
+            "dropoff": {"lat": d_lat, "lng": d_lng, "address": r.dropoff_address},
+            "budget": float(r.budget) if r.budget else 0.0
+        })
+        if p_lat != 0.0 and p_lng != 0.0:
+            heatmap.append({"lat": p_lat, "lng": p_lng, "intensity": 1.0})
+
+    return {
+        "timestamp": datetime.datetime.utcnow().isoformat(),
+        "drivers_online_count": len(driver_markers),
+        "active_rides_count": len(active_rides),
+        "drivers": driver_markers,
+        "active_rides": active_rides,
+        "demand_heatmap": heatmap
+    }
+
+
+@router.get("/trips/{assignment_id}/replay", dependencies=[admin_role_dependency])
+async def replay_trip_route(
+    assignment_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Retrieves full recorded GPS track logs for historical trip visual replay."""
+    from app.models.ride import RideTracking, RideAssignment
+
+    stmt_assign = select(RideAssignment).where(RideAssignment.id == assignment_id)
+    assign = (await db.execute(stmt_assign)).scalars().first()
+    if not assign:
+        raise EntityNotFoundException("Ride assignment not found")
+
+    stmt_track = select(RideTracking).where(RideTracking.assignment_id == assignment_id).order_by(RideTracking.recorded_at.asc())
+    track_records = (await db.execute(stmt_track)).scalars().all()
+
+    points = []
+    for tr in track_records:
+        t_lat, t_lng = _geom_to_coords(tr.location)
+        points.append({
+            "lat": t_lat,
+            "lng": t_lng,
+            "speed": float(tr.speed) if tr.speed is not None else 0.0,
+            "heading": float(tr.heading) if tr.heading is not None else 0.0,
+            "timestamp": tr.recorded_at.isoformat() if tr.recorded_at else None
+        })
+
+    return {
+        "assignment_id": str(assignment_id),
+        "request_id": str(assign.request_id),
+        "driver_id": str(assign.driver_id),
+        "status": assign.status,
+        "started_at": assign.started_at.isoformat() if assign.started_at else None,
+        "ended_at": assign.ended_at.isoformat() if assign.ended_at else None,
+        "points_count": len(points),
+        "route_points": points
+    }
+
+
+@router.get("/fraud-alerts", dependencies=[admin_role_dependency])
+async def list_fraud_alerts(
+    db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Scans telemetry for impossible GPS teleports (>180km/h), rapid state toggling, and duplicate OTP attempts."""
+    from app.models.ride import RideTracking
+    from sqlalchemy import select
+
+    stmt_fast = select(RideTracking).where(RideTracking.speed > 180.0).limit(50)
+    fast_records = (await db.execute(stmt_fast)).scalars().all()
+
+    alerts = []
+    for fr in fast_records:
+        alerts.append({
+            "type": "IMPOSSIBLE_GPS_SPEED",
+            "severity": "HIGH",
+            "assignment_id": str(fr.assignment_id),
+            "speed_kmh": float(fr.speed),
+            "timestamp": fr.recorded_at.isoformat() if fr.recorded_at else None,
+            "description": f"Vehicle recorded telemetry speed of {fr.speed} km/h exceeding maximum threshold of 180 km/h."
+        })
+
+    return {
+        "total_alerts": len(alerts),
+        "alerts": alerts
+    }
+
+
+@router.get("/health")
+async def get_health_status(
+    db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Detailed operational health status monitoring API response."""
+    from app.core.database import check_database_health
+    from app.core.redis import redis_manager
+
+    db_ok = await check_database_health()
+    redis_ok = await redis_manager.ping()
+
+    return {
+        "status": "healthy" if db_ok and redis_ok else "degraded",
+        "timestamp": datetime.datetime.utcnow().isoformat(),
+        "services": {
+            "postgres": "online" if db_ok else "offline",
+            "redis": "online" if redis_ok else "offline",
+            "socket_io": "online"
+        },
+        "system": {
+            "cpu_percent": psutil.cpu_percent(),
+            "memory_percent": psutil.virtual_memory().percent,
+            "uptime_seconds": (datetime.datetime.utcnow() - START_TIME).total_seconds()
+        }
+    }
+

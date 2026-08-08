@@ -24,19 +24,6 @@ export const DashboardPage: React.FC = () => {
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Daily earnings mock for interactive summary chart
-  const weeklyEarnings = [
-    { day: 'Mon', amount: 2800 },
-    { day: 'Tue', amount: 3500 },
-    { day: 'Wed', amount: 3100 },
-    { day: 'Thu', amount: 4800 },
-    { day: 'Fri', amount: 5600 },
-    { day: 'Sat', amount: 7200 },
-    { day: 'Sun', amount: 4100 },
-  ];
-
-  const totalWeeklyEarnings = weeklyEarnings.reduce((acc, curr) => acc + curr.amount, 0);
-
   useEffect(() => {
     const fetchDashboard = async () => {
       try {
@@ -54,10 +41,22 @@ export const DashboardPage: React.FC = () => {
   const isOnline = driverProfile?.online_status || dashboardData?.online_status || false;
   const rating = driverProfile?.rating ?? dashboardData?.rating ?? 4.9;
   const acceptanceRate = (driverProfile as any)?.acceptance_rate ?? dashboardData?.acceptance_rate ?? 92.0;
-  const walletBalance = dashboardData?.wallet_balance ?? 210.00;
+  const walletBalance = dashboardData?.wallet_balance ?? 0.00;
 
-  // Render SVG chart peaks
-  const maxAmount = Math.max(...weeklyEarnings.map(e => e.amount));
+  const weeklyEarnings = dashboardData?.weekly_performance?.length
+    ? dashboardData.weekly_performance
+    : [
+        { day: 'Mon', amount: 0 },
+        { day: 'Tue', amount: 0 },
+        { day: 'Wed', amount: 0 },
+        { day: 'Thu', amount: 0 },
+        { day: 'Fri', amount: 0 },
+        { day: 'Sat', amount: 0 },
+        { day: 'Sun', amount: 0 },
+      ];
+
+  const totalWeeklyEarnings = weeklyEarnings.reduce((acc: number, curr: any) => acc + curr.amount, 0);
+  const maxAmount = Math.max(...weeklyEarnings.map((e: any) => e.amount), 1);
 
   return (
     <div className="space-y-6 pb-12">
@@ -93,6 +92,29 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Active Trip Banner */}
+      {dashboardData?.active_assignment && (
+        <div className="glass-panel-dark border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 p-6 rounded-3xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-emerald-glow">
+          <div>
+            <span className="text-xs font-bold uppercase tracking-wider bg-emerald-500/20 px-3 py-1 rounded-full inline-block mb-1.5">
+              Active Trip In Progress ({dashboardData.active_assignment.status.replace('_', ' ')})
+            </span>
+            <h3 className="text-lg font-bold text-white">
+              {dashboardData.active_assignment.pickup_address} → {dashboardData.active_assignment.dropoff_address}
+            </h3>
+            <p className="text-slate-400 text-xs mt-1">
+              Price: {formatCurrency(dashboardData.active_assignment.price)} • OTP Verification Code: <span className="font-mono text-emerald-300 font-extrabold">{dashboardData.active_assignment.otp}</span>
+            </p>
+          </div>
+          <Link
+            to={`/active/${dashboardData.active_assignment.assignment_id}`}
+            className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm shadow-emerald-glow text-center transition-colors"
+          >
+            Resume Trip →
+          </Link>
+        </div>
+      )}
+
       {/* Earnings & Key Metrics Cards */}
       <div className="grid md:grid-cols-4 gap-4">
         <div className="glass-panel-dark p-5 rounded-3xl border border-slate-800 shadow-lg">
@@ -101,9 +123,9 @@ export const DashboardPage: React.FC = () => {
             <TrendingUp className="w-4 h-4 text-emerald-400" />
           </div>
           <h3 className="text-3xl font-extrabold text-emerald-400 font-display">
-            {formatCurrency(1450.00)}
+            {formatCurrency(dashboardData?.today_earnings ?? 0.0)}
           </h3>
-          <p className="text-[11px] text-slate-500 mt-1">+18% vs yesterday</p>
+          <p className="text-[11px] text-slate-500 mt-1">Directly credited to wallet</p>
         </div>
 
         <div className="glass-panel-dark p-5 rounded-3xl border border-slate-800 shadow-lg">
@@ -111,8 +133,10 @@ export const DashboardPage: React.FC = () => {
             <span className="text-xs font-bold uppercase tracking-wider">Completed Trips</span>
             <Car className="w-4 h-4 text-sky-400" />
           </div>
-          <h3 className="text-3xl font-extrabold text-white font-display">42</h3>
-          <p className="text-[11px] text-slate-500 mt-1">100% completion rate</p>
+          <h3 className="text-3xl font-extrabold text-white font-display">
+            {dashboardData?.completed_trips ?? 0}
+          </h3>
+          <p className="text-[11px] text-slate-500 mt-1">Target: {dashboardData?.completed_trips ? dashboardData.completed_trips + 3 : 5} trips</p>
         </div>
 
         <div className="glass-panel-dark p-5 rounded-3xl border border-slate-800 shadow-lg">
@@ -120,7 +144,9 @@ export const DashboardPage: React.FC = () => {
             <span className="text-xs font-bold uppercase tracking-wider">Bids Win Rate</span>
             <Award className="w-4 h-4 text-amber-400" />
           </div>
-          <h3 className="text-3xl font-extrabold text-white font-display">82%</h3>
+          <h3 className="text-3xl font-extrabold text-white font-display">
+            {Math.round((dashboardData?.win_rate ?? 1.0) * 100)}%
+          </h3>
           <p className="text-[11px] text-slate-500 mt-1">High competitive edge</p>
         </div>
 
@@ -159,7 +185,7 @@ export const DashboardPage: React.FC = () => {
             <div className="absolute inset-x-0 bottom-0 h-[50%] border-b border-slate-800/50 pointer-events-none" />
             <div className="absolute inset-x-0 bottom-0 h-[75%] border-b border-slate-800/50 pointer-events-none" />
 
-            {weeklyEarnings.map((item, idx) => {
+            {weeklyEarnings.map((item: any, idx: number) => {
               const pct = (item.amount / maxAmount) * 100;
               return (
                 <div key={idx} className="flex-1 flex flex-col items-center gap-2 group z-10">

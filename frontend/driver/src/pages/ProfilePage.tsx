@@ -150,12 +150,12 @@ export const ProfilePage: React.FC = () => {
               <div className="p-3 rounded-2xl bg-slate-900 border border-slate-800">
                 <Award className="w-4.5 h-4.5 text-emerald-400 mx-auto mb-1" />
                 <span className="block text-[10px] text-slate-500 uppercase tracking-wider font-bold">Rating</span>
-                <span className="text-sm font-extrabold text-white">{driverProfile?.rating || '4.9'} ★</span>
+                <span className="text-sm font-extrabold text-white">{driverProfile?.rating ?? 5.0} ★</span>
               </div>
               <div className="p-3 rounded-2xl bg-slate-900 border border-slate-800">
                 <Car className="w-4.5 h-4.5 text-sky-400 mx-auto mb-1" />
                 <span className="block text-[10px] text-slate-500 uppercase tracking-wider font-bold">Trips Done</span>
-                <span className="text-sm font-extrabold text-white">{driverProfile?.total_trips || '142'}</span>
+                <span className="text-sm font-extrabold text-white">{driverProfile?.total_trips ?? 0}</span>
               </div>
             </div>
             
@@ -171,9 +171,20 @@ export const ProfilePage: React.FC = () => {
                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Assigned License</label>
                 <div className="flex items-center gap-2 text-white">
                   <Shield className="w-4 h-4 text-slate-500" />
-                  <span className="text-sm font-mono font-semibold">{driverProfile?.license_number || 'TN-01-2022-0012345'}</span>
+                  <span className="text-sm font-mono font-semibold">{driverProfile?.license_number ?? 'Not Available'}</span>
                 </div>
               </div>
+              {driverProfile?.vehicle_details && (
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Active Vehicle</label>
+                  <div className="flex items-center gap-2 text-white">
+                    <Car className="w-4 h-4 text-slate-500" />
+                    <span className="text-sm font-semibold">
+                      {driverProfile.vehicle_details.color} {driverProfile.vehicle_details.make} {driverProfile.vehicle_details.model} ({driverProfile.vehicle_details.plate_number})
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

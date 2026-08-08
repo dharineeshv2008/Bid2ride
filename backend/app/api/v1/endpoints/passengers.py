@@ -129,6 +129,68 @@ async def list_saved_places(
     return response
 
 
+@router.get("/drivers/nearby", response_model=List[dict])
+async def list_nearby_online_drivers(
+    lat: float = 12.9716,
+    lng: float = 77.5946,
+    radius: float = 50000.0,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    _role=passenger_role_dependency
+) -> List[dict]:
+    """Queries 50 KM PostGIS spatial radius for online approved drivers."""
+    from sqlalchemy import select
+    from geoalchemy2.elements import WKTElement
+    from geoalchemy2.functions import ST_DWithin
+    from sqlalchemy.orm import selectinload
+    from app.models.driver import Driver
+    import datetime
+
+    point = f"SRID=4326;POINT({lng} {lat})"
+    geom_wkt = WKTElement(point, srid=4326)
+
+    stmt = (
+        select(Driver)
+        .options(selectinload(Driver.active_vehicle), selectinload(Driver.user))
+        .where(
+            Driver.online_status == True,
+            Driver.verification_status == "APPROVED",
+            Driver.current_location.isnot(None),
+            ST_DWithin(Driver.current_location, geom_wkt, radius)
+        )
+        .order_by(Driver.rating.desc())
+        .limit(50)
+    )
+
+    result = await db.execute(stmt)
+    drivers = result.scalars().all()
+
+    response = []
+    for d in drivers:
+        d_lat, d_lng = _geom_to_coords(d.current_location)
+        if d_lat == 0.0 and d_lng == 0.0:
+            continue
+
+        vehicle_desc = "Standard Vehicle"
+        if d.active_vehicle:
+            v = d.active_vehicle
+            vehicle_desc = f"{v.color} {v.make} {v.model} ({v.plate_number})"
+
+        response.append({
+            "driver_id": str(d.id),
+            "name": d.user.name if d.user else "Driver Pilot",
+            "rating": float(d.rating),
+            "rating_count": d.rating_count,
+            "lat": d_lat,
+            "lng": d_lng,
+            "vehicle_details": vehicle_desc,
+            "category": d.active_vehicle.category if d.active_vehicle else "ECONOMY",
+            "online_status": d.online_status
+        })
+
+    return response
+
+
 @router.post("/saved-places", response_model=SavedPlaceResponse, status_code=status.HTTP_201_CREATED)
 async def create_saved_place(
     payload: SavedPlaceCreateRequest,
@@ -223,6 +285,13 @@ async def create_ride_request(
     _role=passenger_role_dependency
 ) -> dict:
     """Creates a new ride request and triggers driver bidding notifications."""
+    from app.repositories.ride_repository import RideRepository
+    from app.core.exceptions import ValidationException
+    repo = RideRepository(RideRequest, db)
+    active = await repo.get_active_passenger_ride(current_user.id)
+    if active:
+        raise ValidationException("Passenger already has an active ride request in progress.")
+
     effective_budget = payload.budget if payload.budget is not None else (payload.target_budget if payload.target_budget is not None else 100.0)
     effective_category = payload.category or payload.vehicle_category or "SEDAN"
 
@@ -407,11 +476,14 @@ async def list_ride_bids(
             vehicle_desc = f"{v.make} {v.model} ({v.color} - {v.plate_number})"
 
         response.append({
+            "id": bid.id,
             "bid_id": bid.id,
             "driver_name": driver_user.name,
             "driver_rating": float(driver.rating),
             "vehicle_details": vehicle_desc,
+            "vehicle_model": vehicle_desc,
             "amount": float(bid.amount),
+            "bid_amount": float(bid.amount),
             "eta_minutes": bid.eta_minutes
         })
     return response
@@ -452,11 +524,30 @@ async def accept_driver_bid(
     return {
         "status": "success",
         "data": {
+            "id": assignment.id,
             "assignment_id": assignment.id,
             "otp": assignment.otp,
             "price": float(assignment.price_charged)
         }
     }
+
+
+@router.post("/bids/{bid_id}/accept", status_code=status.HTTP_200_OK)
+async def accept_bid_direct(
+    bid_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    _role=passenger_role_dependency
+) -> dict:
+    """Direct bid acceptance route by bid_id."""
+    from app.models.ride import DriverBid
+    from app.repositories.ride_repository import BidRepository
+    bid_repo = BidRepository(DriverBid, db)
+    bid = await bid_repo.get(bid_id)
+    if not bid:
+        raise EntityNotFoundException("Bid not found")
+    
+    return await accept_driver_bid(ride_id=bid.request_id, bid_id=bid_id, current_user=current_user, db=db)
 
 
 

@@ -88,6 +88,23 @@ class DriverService(BaseService):
     async def find_nearby_drivers(self, lat: float, lng: float, radius: float = 3000.0) -> List[Tuple[Driver, float]]:
         return await self.repo.find_nearby_online_drivers(lat, lng, radius)
 
+    async def cleanup_stale_heartbeats(self, timeout_seconds: int = 90) -> int:
+        """Sets online_status = False for drivers with last_pinged_at older than timeout_seconds."""
+        from sqlalchemy import update
+        threshold = datetime.datetime.utcnow() - datetime.timedelta(seconds=timeout_seconds)
+        stmt = (
+            update(Driver)
+            .where(
+                Driver.online_status == True,
+                Driver.last_pinged_at < threshold
+            )
+            .values(online_status=False)
+        )
+        res = await self.session.execute(stmt)
+        await self.commit()
+        return res.rowcount
+
+
 
 class VehicleService(BaseService):
     def __init__(self, session: AsyncSession) -> None:

@@ -9,6 +9,7 @@ from app.schemas.payment import (
     WalletBalanceResponse,
     WalletHistoryResponse,
     WalletTopUpRequest,
+    WalletWithdrawRequest,
 )
 from app.services.payment_service import WalletService
 from app.repositories.payment_repository import WalletTransactionRepository
@@ -103,3 +104,26 @@ async def topup_wallet_balance(
         "currency": wallet.currency,
         "updated_at": wallet.updated_at
     }
+
+
+@router.post("/withdraw", response_model=WalletResponse, status_code=status.HTTP_200_OK)
+async def withdraw_wallet_balance(
+    payload: WalletWithdrawRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Executes pessimistic SELECT FOR UPDATE balance validation and registers a CASH_OUT withdrawal transaction."""
+    wallet_service = WalletService(db)
+    wallet = await wallet_service.withdraw_balance(
+        user_id=current_user.id,
+        amount=payload.amount,
+        details=payload.account_details
+    )
+    return {
+        "id": wallet.id,
+        "user_id": wallet.user_id,
+        "balance": float(wallet.balance),
+        "currency": wallet.currency,
+        "updated_at": wallet.updated_at
+    }
+

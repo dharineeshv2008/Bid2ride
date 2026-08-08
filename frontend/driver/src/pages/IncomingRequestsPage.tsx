@@ -15,73 +15,29 @@ export const IncomingRequestsPage: React.FC = () => {
   const [biddingId, setBiddingId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const fetchRequests = async () => {
+    try {
+      const { data } = await api.get<RideRequest[]>('/driver/requests/nearby');
+      setRequests(data);
+    } catch (err) {
+      console.error('Failed to load active nearby ride requests', err);
+      setRequests([]);
+    }
+  };
+
   useEffect(() => {
-    // Initial fetch of active spatial requests
-    const fetchRequests = async () => {
-      try {
-        const { data } = await api.get<RideRequest[]>('/driver/requests/nearby');
-        setRequests(data);
-      } catch (err) {
-        // Mock fallback requests if backend endpoint is initializing
-        setRequests([
-          {
-            id: 'mock_req_1',
-            passenger_id: 'pass_1',
-            pickup_address: 'T. Nagar Bus Terminus, Chennai',
-            pickup_lat: 13.0418,
-            pickup_lng: 80.2341,
-            dropoff_address: 'Guindy Kathipara Junction, Chennai',
-            dropoff_lat: 13.0067,
-            dropoff_lng: 80.2020,
-            vehicle_category: 'SEDAN',
-            target_budget: 240.0,
-            created_at: new Date().toISOString(),
-            passenger_name: 'Suresh Kumar',
-            passenger_rating: 4.9,
-          },
-          {
-            id: 'mock_req_2',
-            passenger_id: 'pass_2',
-            pickup_address: 'Indiranagar 100ft Road, Bengaluru',
-            pickup_lat: 12.9784,
-            pickup_lng: 77.6408,
-            dropoff_address: 'Kempegowda International Airport, Bengaluru',
-            dropoff_lat: 13.1986,
-            dropoff_lng: 77.7066,
-            vehicle_category: 'LUXURY',
-            target_budget: 850.0,
-            created_at: new Date().toISOString(),
-            passenger_name: 'Anitha Vasudevan',
-            passenger_rating: 4.95,
-          },
-          {
-            id: 'mock_req_3',
-            passenger_id: 'pass_3',
-            pickup_address: 'RS Puram West, Coimbatore',
-            pickup_lat: 11.0084,
-            pickup_lng: 76.9497,
-            dropoff_address: 'Gandhipuram Bus Stand, Coimbatore',
-            dropoff_lat: 11.0183,
-            dropoff_lng: 76.9664,
-            vehicle_category: 'AUTO',
-            target_budget: 110.0,
-            created_at: new Date().toISOString(),
-            passenger_name: 'Ramesh Kannan',
-            passenger_rating: 4.8,
-          },
-        ]);
-      }
-    };
     fetchRequests();
 
     if (socket) {
-      const handleNewRequest = (req: RideRequest) => {
-        setRequests((prev) => [req, ...prev]);
+      const handleReload = () => {
+        fetchRequests();
       };
-      socket.on('new_ride_request_broadcast', handleNewRequest);
+      socket.on('new_ride_request_broadcast', handleReload);
+      socket.on('ride_available', handleReload);
 
       return () => {
-        socket.off('new_ride_request_broadcast', handleNewRequest);
+        socket.off('new_ride_request_broadcast', handleReload);
+        socket.off('ride_available', handleReload);
       };
     }
   }, [socket]);
@@ -92,6 +48,7 @@ export const IncomingRequestsPage: React.FC = () => {
     try {
       await api.post('/driver/bids', {
         request_id: requestId,
+        amount: amount,
         bid_amount: amount,
         eta_minutes: 4,
       });

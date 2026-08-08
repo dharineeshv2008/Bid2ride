@@ -39,6 +39,34 @@ class WalletService(BaseService):
         return wallet
 
 
+    async def withdraw_balance(
+        self,
+        user_id: uuid.UUID,
+        amount: float,
+        payment_method: str = "UPI",
+        details: str = None
+    ) -> Wallet:
+        """Pessimistically locks wallet row and registers a CASH_OUT withdrawal transaction."""
+        if amount <= 0:
+            raise ValidationException("Withdrawal amount must be greater than zero")
+
+        wallet = await self.repo.get_by_user_id(user_id, for_update=True)
+        if not wallet or float(wallet.balance) < float(amount):
+            raise InsufficientWalletBalanceException("Insufficient wallet balance for withdrawal")
+
+        wallet.balance = float(wallet.balance) - float(amount)
+
+        await self.ledger_repo.create({
+            "wallet_id": wallet.id,
+            "amount": amount,
+            "type": "DEBIT",
+            "transaction_purpose": "CASH_OUT"
+        })
+
+        await self.commit()
+        return wallet
+
+
 class PaymentService(BaseService):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session)
@@ -54,9 +82,9 @@ class PaymentService(BaseService):
         amount: float,
         commission_rate: float = 0.15
     ) -> Tuple[Payment, Wallet, Wallet]:
-        """Settles ride charges. Deducts balance from passenger wallet, credits driver wallet minus commission."""
-        passenger_wallet = await self.wallet_repo.get_by_user_id(passenger_user_id)
-        driver_wallet = await self.wallet_repo.get_by_user_id(driver_user_id)
+        """Settles ride charges using pessimistic FOR UPDATE row locks."""
+        passenger_wallet = await self.wallet_repo.get_by_user_id(passenger_user_id, for_update=True)
+        driver_wallet = await self.wallet_repo.get_by_user_id(driver_user_id, for_update=True)
 
         if not passenger_wallet or not driver_wallet:
             raise EntityNotFoundException("Passenger or Driver wallet not initialized")

@@ -197,9 +197,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const toggleOnlineStatus = async (online: boolean) => {
-    const { data } = await api.put<DriverProfile>('/driver/availability', { online_status: online });
+    let payload: any = { online_status: online, status: online ? 'ONLINE' : 'OFFLINE' };
+    
+    if (online && 'geolocation' in navigator) {
+      try {
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 5000,
+            maximumAge: 0
+          });
+        });
+        if (position.coords.accuracy <= 100) {
+          payload.lat = position.coords.latitude;
+          payload.lng = position.coords.longitude;
+          payload.heading = position.coords.heading || 0;
+          payload.speed = position.coords.speed || 0;
+          payload.accuracy = position.coords.accuracy;
+        }
+      } catch (e) {
+        console.warn('Geolocation capture failed or permission denied, proceeding with status update', e);
+      }
+    }
+
+    const { data } = await api.put<DriverProfile>('/driver/availability', payload);
     setDriverProfile(data);
   };
+
+  // 30-Second Driver Heartbeat Loop
+  useEffect(() => {
+    if (!driverProfile?.online_status) return;
+
+    const interval = setInterval(() => {
+      if ('geolocation' in navigator) {
+        navigator.geolocation.getCurrentPosition((pos) => {
+          if (pos.coords.accuracy <= 100) {
+            api.post('/driver/heartbeat', {
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+              heading: pos.coords.heading || 0,
+              speed: pos.coords.speed || 0,
+              accuracy: pos.coords.accuracy
+            }).catch(() => {});
+          }
+        }, () => {
+          api.post('/driver/heartbeat', {}).catch(() => {});
+        });
+      } else {
+        api.post('/driver/heartbeat', {}).catch(() => {});
+      }
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [driverProfile?.online_status]);
 
   const logout = async () => {
     try {

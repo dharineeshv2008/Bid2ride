@@ -95,7 +95,9 @@ class BidResponse(BaseModel):
     driver_name: str
     driver_rating: float
     vehicle_details: str
+    vehicle_model: Optional[str] = None
     amount: float
+    bid_amount: Optional[float] = None
     eta_minutes: int
 
 

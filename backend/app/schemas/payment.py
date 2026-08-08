@@ -42,6 +42,12 @@ class WalletTopUpRequest(BaseModel):
     amount: float = Field(..., ge=5.00, description="Top-up minimum is ₹5.00")
 
 
+class WalletWithdrawRequest(BaseModel):
+    amount: float = Field(..., ge=10.00, description="Minimum withdrawal is ₹10.00")
+    account_details: Optional[str] = None
+
+
+
 class RidePaymentRequest(BaseModel):
     idempotency_key: str = Field(..., min_length=10, max_length=100)
 

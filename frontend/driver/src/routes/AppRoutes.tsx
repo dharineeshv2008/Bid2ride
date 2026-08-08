@@ -11,6 +11,7 @@ import { DashboardPage } from '../pages/DashboardPage';
 import { IncomingRequestsPage } from '../pages/IncomingRequestsPage';
 import { ActiveRidePage } from '../pages/ActiveRidePage';
 import { WalletPage } from '../pages/WalletPage';
+import { EarningsPage } from '../pages/EarningsPage';
 import { NotificationsPage } from '../pages/NotificationsPage';
 import { ProfilePage } from '../pages/ProfilePage';
 
@@ -72,6 +73,7 @@ export const AppRoutes: React.FC = () => {
       >
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/requests" element={<IncomingRequestsPage />} />
+        <Route path="/earnings" element={<EarningsPage />} />
         <Route path="/active/:assignmentId" element={<ActiveRidePage />} />
         <Route path="/wallet" element={<WalletPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />

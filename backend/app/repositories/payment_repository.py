@@ -11,9 +11,11 @@ class WalletRepository(BaseRepository[Wallet]):
         session = args[1] if len(args) >= 2 else (args[0] if len(args) == 1 else kwargs.get("session"))
         super().__init__(Wallet, session)
 
-    async def get_by_user_id(self, user_id: uuid.UUID) -> Optional[Wallet]:
-        """Fetches a user's wallet record."""
+    async def get_by_user_id(self, user_id: uuid.UUID, for_update: bool = False) -> Optional[Wallet]:
+        """Fetches a user's wallet record with optional pessimistic FOR UPDATE lock."""
         stmt = select(Wallet).where(Wallet.user_id == user_id)
+        if for_update:
+            stmt = stmt.with_for_update()
         result = await self.session.execute(stmt)
         return result.scalars().first()
 

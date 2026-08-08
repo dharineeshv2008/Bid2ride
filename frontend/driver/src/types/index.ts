@@ -30,6 +30,16 @@ export interface DriverProfile {
   rating: number;
   total_trips: number;
   active_vehicle_id?: string;
+  vehicle_details?: {
+    id: string;
+    make: string;
+    model: string;
+    year: number;
+    color: string;
+    plate_number: string;
+    category: string;
+    status: string;
+  };
 }
 
 export interface Vehicle {
