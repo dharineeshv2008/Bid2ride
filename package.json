@@ -12,7 +12,7 @@
     "build": "npm run build --workspaces"
   },
   "devDependencies": {
-    "typescript": "^5.5.3",
+    "typescript": "^7.0.2",
     "vite": "^5.4.3",
     "@types/node": "^22.5.4"
   }
