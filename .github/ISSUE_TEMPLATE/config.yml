@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Community Discussions
+    url: https://github.com/john2010may/bid2ride/discussions
+    about: Ask questions, share ideas, and connect with other Bid2Ride community members.
+  - name: Security Vulnerabilities
+    url: https://github.com/john2010may/bid2ride/security/advisories/new
+    about: Privately report security issues.

@@ -2,14 +2,15 @@ name: Bid2Ride Continuous Integration
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, develop ]
 
 jobs:
-  validate-and-test:
+  backend-test:
+    name: Python Backend Tests & Linting
     runs-on: ubuntu-latest
-    
+
     services:
       postgres:
         image: postgis/postgis:15-3.3
@@ -36,37 +37,59 @@ jobs:
           --health-retries 5
 
     steps:
-    - name: Check out repository code
-      uses: actions/checkout@v3
+    - name: Checkout Repository
+      uses: actions/checkout@v4
 
     - name: Set up Python 3.13
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: "3.13"
+        cache: "pip"
 
-    - name: Install dependencies
+    - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install ruff black pytest pytest-asyncio httpx
+        pip install ruff black pytest pytest-asyncio pytest-cov httpx
         pip install -r backend/requirements.txt
 
-    - name: Verify code formatting with Black
+    - name: Check Code Formatting (Black)
       run: black --check backend
 
-    - name: Verify linting with Ruff
+    - name: Check Linting (Ruff)
       run: ruff check backend
 
-    - name: Run Test Suites with Pytest
+    - name: Run Pytest Suite with Coverage
       env:
         ENVIRONMENT: testing
         POSTGRES_SERVER: localhost
         POSTGRES_USER: bid2ride_user
         POSTGRES_PASSWORD: bid2ride_password
         POSTGRES_DB: bid2ride_db
-        REDIS_HOST=localhost
+        REDIS_HOST: localhost
+        SECRET_KEY: ci_secret_key_testing_only
       run: |
-        pytest backend/tests/ --maxfail=1 --disable-warnings
+        pytest backend/tests/ --cov=backend/app --cov-report=xml --disable-warnings
 
-    - name: Verify Docker Container Build
+    - name: Build Backend Docker Container
       run: |
-        docker build -t bid2ride-web-test ./backend
+        docker build -t bid2ride-backend:latest ./backend
+
+  frontend-build:
+    name: Frontend Workspaces Typecheck & Build
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js 20
+      uses: actions/setup-node@v4
+      with:
+        node-version: "20"
+        cache: "npm"
+
+    - name: Install NPM Dependencies across Workspaces
+      run: npm ci || npm install
+
+    - name: Build All Workspaces
+      run: npm run build
