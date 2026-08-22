@@ -67,6 +67,7 @@ async def _add_admin_audit_log(db: AsyncSession, admin_id: uuid.UUID, action: st
 # =====================================================================
 
 @router.get("/dashboard", response_model=DashboardOverviewResponse, dependencies=[admin_role_dependency])
+@router.get("/overview", response_model=DashboardOverviewResponse, dependencies=[admin_role_dependency])
 async def get_dashboard_overview(
     db: AsyncSession = Depends(get_db)
 ) -> dict:
@@ -261,6 +262,31 @@ async def reject_driver_verification(
     }
 
 
+from pydantic import BaseModel
+
+class DriverVerificationStatusRequest(BaseModel):
+    status: str
+
+@router.post("/drivers/{driver_id}/verify", response_model=DriverVerificationResponse)
+async def verify_driver_status(
+    driver_id: uuid.UUID,
+    payload: DriverVerificationStatusRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    _role=admin_role_dependency
+) -> dict:
+    """Verifies driver status as APPROVED or REJECTED to support old frontend contract."""
+    status_upper = payload.status.upper()
+    if status_upper == "APPROVED":
+        return await approve_driver_verification(driver_id, current_user, db)
+    elif status_upper == "REJECTED":
+        req_payload = DriverVerificationRequest(reason="Documents rejected by admin review.")
+        return await reject_driver_verification(driver_id, req_payload, current_user, db)
+    else:
+        raise ValidationException("Invalid verification status. Must be APPROVED or REJECTED.")
+
+
+
 # =====================================================================
 # 4. RIDE & PAYMENTS LISTINGS
 # =====================================================================
@@ -362,6 +388,30 @@ def _geom_to_coords(geom: Any) -> tuple[float, float]:
         return float(shape.y), float(shape.x)
     except Exception:
         pass
+
+    # Try custom binary EWKB/WKB POINT parser
+    try:
+        import struct
+        wkb_bytes = None
+        if hasattr(geom, "data"):
+            wkb_bytes = geom.data
+        elif isinstance(geom, (str, bytes)):
+            wkb_bytes = geom
+            
+        if isinstance(wkb_bytes, str):
+            wkb_bytes = bytes.fromhex(wkb_bytes.strip())
+            
+        if isinstance(wkb_bytes, bytes) and len(wkb_bytes) >= 21:
+            byte_order = '<' if wkb_bytes[0] == 1 else '>'
+            geom_type = struct.unpack(byte_order + 'I', wkb_bytes[1:5])[0]
+            has_srid = bool(geom_type & 0x20000000)
+            offset = 9 if has_srid else 5
+            if len(wkb_bytes) >= offset + 16:
+                x, y = struct.unpack(byte_order + 'dd', wkb_bytes[offset:offset+16])
+                return float(y), float(x)
+    except Exception:
+        pass
+
     try:
         str_val = str(geom)
         if "POINT" in str_val:
@@ -437,7 +487,7 @@ async def replay_trip_route(
     if not assign:
         raise EntityNotFoundException("Ride assignment not found")
 
-    stmt_track = select(RideTracking).where(RideTracking.assignment_id == assignment_id).order_by(RideTracking.recorded_at.asc())
+    stmt_track = select(RideTracking).where(RideTracking.assignment_id == assignment_id).order_by(RideTracking.pinged_at.asc())
     track_records = (await db.execute(stmt_track)).scalars().all()
 
     points = []
@@ -448,7 +498,7 @@ async def replay_trip_route(
             "lng": t_lng,
             "speed": float(tr.speed) if tr.speed is not None else 0.0,
             "heading": float(tr.heading) if tr.heading is not None else 0.0,
-            "timestamp": tr.recorded_at.isoformat() if tr.recorded_at else None
+            "timestamp": tr.pinged_at.isoformat() if tr.pinged_at else None
         })
 
     return {
@@ -481,7 +531,7 @@ async def list_fraud_alerts(
             "severity": "HIGH",
             "assignment_id": str(fr.assignment_id),
             "speed_kmh": float(fr.speed),
-            "timestamp": fr.recorded_at.isoformat() if fr.recorded_at else None,
+            "timestamp": fr.pinged_at.isoformat() if fr.pinged_at else None,
             "description": f"Vehicle recorded telemetry speed of {fr.speed} km/h exceeding maximum threshold of 180 km/h."
         })
 

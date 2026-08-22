@@ -1,6 +1,7 @@
 import json
 import uuid
 import datetime
+import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
@@ -32,6 +33,7 @@ from app.repositories.ride_repository import RideAssignmentRepository, RideRepos
 from app.services.socket_service import sio
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 async def _verify_assignment_role_ownership(assignment_id: uuid.UUID, user: User, db: AsyncSession, expected_role: Optional[str] = None) -> RideAssignment:
@@ -39,11 +41,23 @@ async def _verify_assignment_role_ownership(assignment_id: uuid.UUID, user: User
     repo = RideAssignmentRepository(RideAssignment, db)
     assignment = await repo.get(assignment_id)
     if not assignment:
+        # Fallback to search assignment by ride_id (request_id)
+        from sqlalchemy import select
+        stmt = select(RideAssignment).where(RideAssignment.request_id == assignment_id)
+        res = await db.execute(stmt)
+        assignment = res.scalars().first()
+        if assignment:
+            logger.info(f"[RIDE LOOKUP] Found assignment {assignment.id} using request_id {assignment_id}")
+
+    if not assignment:
         raise EntityNotFoundException("Ride assignment not found")
 
     # If role-based checks are specified
-    if expected_role and user.role != expected_role:
-        raise PermissionDeniedException(f"Action restricted to {expected_role} role only")
+    if expected_role:
+        logger.info(f"[AUTH DEBUG] Ride ownership role check: User: {user.id}, role: {user.role}, expected: {expected_role}")
+        if str(user.role).upper() != str(expected_role).upper():
+            logger.warning(f"[AUTH DEBUG] Ride ownership role mismatch: User {user.id} has role {user.role} but expected {expected_role}")
+            raise PermissionDeniedException(f"Action restricted to {expected_role} role only")
 
     # Check user ownership bounds
     ride_repo = RideRepository(RideRequest, db)
@@ -112,7 +126,7 @@ async def driver_arrived(
     """Driver marks arrival at pickup location, switching state to DRIVER_ARRIVED."""
     assignment = await _verify_assignment_role_ownership(ride_id, current_user, db, "DRIVER")
     
-    if assignment.status != "DRIVER_ACCEPTED":
+    if assignment.status not in ["ACCEPTED", "DRIVER_ACCEPTED"]:
         raise ValidationException("Cannot mark arrival before accepting the assignment")
 
     # State transition
@@ -225,6 +239,52 @@ async def complete_ride(
         "created_at": assignment.created_at
     }
 
+@router.post("/{ride_id}/cancel", response_model=RideAssignmentResponse)
+async def driver_cancel_assignment(
+    ride_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Driver cancels the ride assignment."""
+    if current_user.role != "DRIVER":
+        raise PermissionDeniedException("Only drivers can perform this action")
+
+    repo = RideAssignmentRepository(RideAssignment, db)
+    # The ride_id could be assignment_id
+    assignment = await repo.get(ride_id)
+    if not assignment:
+        raise EntityNotFoundException("Ride assignment not found")
+
+    if assignment.driver_id != current_user.id:
+        raise PermissionDeniedException("Not your assignment")
+
+    if assignment.status not in ["DRIVER_ACCEPTED", "ACCEPTED", "ARRIVED", "DRIVER_ARRIVED"]:
+        raise PermissionDeniedException("Cannot cancel from current status")
+
+    assignment.status = "CANCELLED"
+    
+    # Also cancel the request
+    from app.repositories.ride_repository import RideRepository
+    req_repo = RideRepository(RideRequest, db)
+    request = await req_repo.get(assignment.request_id)
+    if request:
+        request.status = "CANCELLED"
+
+    await db.commit()
+    await db.refresh(assignment)
+
+    from app.services.socket_service import sio
+    await sio.emit("ride_cancelled", {"assignment_id": str(assignment.id)}, room=f"passenger:{request.passenger_id}")
+
+    return {
+        "id": assignment.id,
+        "request_id": assignment.request_id,
+        "driver_id": assignment.driver_id,
+        "status": assignment.status,
+        "price": float(assignment.price_charged),
+        "created_at": assignment.created_at
+    }
+
 
 @router.get("/{ride_id}", response_model=RideAssignmentResponse)
 async def get_ride_assignment_details(
@@ -233,32 +293,93 @@ async def get_ride_assignment_details(
     db: AsyncSession = Depends(get_db)
 ) -> dict:
     """Retrieves current assignment details (verifies passenger/driver participant)."""
-    assignment = await _verify_assignment_role_ownership(ride_id, current_user, db)
-    
+    if not ride_id:
+        raise EntityNotFoundException("Ride ID cannot be empty")
+
     from app.repositories.ride_repository import RideRepository
     from app.models.ride import RideRequest
-    from geoalchemy2.shape import to_shape
-    
+
+    def get_coords(geom) -> tuple:
+        if not geom:
+            return 0.0, 0.0
+        try:
+            str_val = str(geom)
+            if "POINT" in str_val:
+                point_part = str_val.split("POINT")[1]
+                coords_str = point_part.strip().lstrip("(").rstrip(")").split()
+                return float(coords_str[1]), float(coords_str[0])
+        except Exception:
+            pass
+        try:
+            from geoalchemy2.shape import to_shape
+            shape = to_shape(geom)
+            return shape.y, shape.x
+        except Exception:
+            pass
+        return 0.0, 0.0
+
+    assignment = None
+    try:
+        assignment = await _verify_assignment_role_ownership(ride_id, current_user, db)
+    except Exception:
+        pass
+
+    if assignment:
+        ride_repo = RideRepository(RideRequest, db)
+        ride = await ride_repo.get(assignment.request_id)
+        
+        pickup_lat, pickup_lng = get_coords(ride.pickup_location)
+        dropoff_lat, dropoff_lng = get_coords(ride.dropoff_location)
+
+        return {
+            "id": assignment.id,
+            "request_id": assignment.request_id,
+            "driver_id": assignment.driver_id,
+            "status": assignment.status,
+            "price": float(assignment.price_charged) if assignment.price_charged is not None else 0.0,
+            "created_at": assignment.created_at,
+            "pickup_address": ride.pickup_address,
+            "pickup_lat": pickup_lat,
+            "pickup_lng": pickup_lng,
+            "dropoff_address": ride.dropoff_address,
+            "dropoff_lat": dropoff_lat,
+            "dropoff_lng": dropoff_lng,
+            "otp": assignment.otp
+        }
+
+    # Assignment not found. Try to load RideRequest directly
     ride_repo = RideRepository(RideRequest, db)
-    ride = await ride_repo.get(assignment.request_id)
-    
-    p_shape = to_shape(ride.pickup_location)
-    d_shape = to_shape(ride.dropoff_location)
-    
+    ride = await ride_repo.get(ride_id)
+    if not ride:
+        raise EntityNotFoundException("Ride request or assignment not found")
+
+    if current_user.id != ride.passenger_id:
+        # Check if current_user is a driver who submitted a bid on this request
+        from app.models.ride import DriverBid
+        from sqlalchemy import select
+        stmt = select(DriverBid).where(DriverBid.request_id == ride.id, DriverBid.driver_id == current_user.id)
+        res = await db.execute(stmt)
+        bid = res.scalars().first()
+        if not bid and current_user.role != "ADMIN":
+            raise PermissionDeniedException("Access denied. User does not own this ride request.")
+
+    pickup_lat, pickup_lng = get_coords(ride.pickup_location)
+    dropoff_lat, dropoff_lng = get_coords(ride.dropoff_location)
+
     return {
-        "id": assignment.id,
-        "request_id": assignment.request_id,
-        "driver_id": assignment.driver_id,
-        "status": assignment.status,
-        "price": float(assignment.price_charged) if assignment.price_charged is not None else 0.0,
-        "created_at": assignment.created_at,
+        "id": None,
+        "request_id": ride.id,
+        "driver_id": None,
+        "status": ride.status,
+        "price": float(ride.budget),
+        "created_at": ride.created_at,
         "pickup_address": ride.pickup_address,
-        "pickup_lat": p_shape.y,
-        "pickup_lng": p_shape.x,
+        "pickup_lat": pickup_lat,
+        "pickup_lng": pickup_lng,
         "dropoff_address": ride.dropoff_address,
-        "dropoff_lat": d_shape.y,
-        "dropoff_lng": d_shape.x,
-        "otp": assignment.otp
+        "dropoff_lat": dropoff_lat,
+        "dropoff_lng": dropoff_lng,
+        "otp": None
     }
 
 
@@ -316,14 +437,18 @@ async def update_driver_location(
     )
 
     # Cache coordinates in Redis
-    location_data = {
-        "lat": payload.lat,
-        "lng": payload.lng,
-        "speed": payload.speed,
-        "heading": payload.heading,
-        "updated_at": datetime.datetime.utcnow().isoformat()
-    }
-    await redis_manager.client.set(f"ride_location:{assignment.id}", json.dumps(location_data), ex=1800)
+    if redis_manager.client:
+        try:
+            location_data = {
+                "lat": payload.lat,
+                "lng": payload.lng,
+                "speed": payload.speed,
+                "heading": payload.heading,
+                "updated_at": datetime.datetime.utcnow().isoformat()
+            }
+            await redis_manager.client.set(f"ride_location:{assignment.id}", json.dumps(location_data), ex=1800)
+        except Exception as e:
+            logger.warning(f"Failed to cache driver location update in Redis: {e}")
 
     # Broadcast location update via WebSockets
     await sio.emit("driver_location_updated", {
@@ -346,7 +471,12 @@ async def get_ride_live_location(
     """Passenger pulls latest driver coordinates from Redis cache."""
     assignment = await _verify_assignment_role_ownership(ride_id, current_user, db)
     
-    raw = await redis_manager.client.get(f"ride_location:{assignment.id}")
+    raw = None
+    if redis_manager.client:
+        try:
+            raw = await redis_manager.client.get(f"ride_location:{assignment.id}")
+        except Exception as e:
+            logger.warning(f"Failed to fetch driver live location from Redis: {e}")
     if not raw:
         # Fallback to loading the last database ping if cache expired
         stmt = select(RideTracking).where(
@@ -358,10 +488,29 @@ async def get_ride_live_location(
         if not last_ping:
             raise EntityNotFoundException("No tracking locations recorded yet for this ride")
         
-        shape = to_shape(last_ping.location)
+        def get_coords(geom) -> tuple:
+            if not geom:
+                return 0.0, 0.0
+            try:
+                str_val = str(geom)
+                if "POINT" in str_val:
+                    point_part = str_val.split("POINT")[1]
+                    coords_str = point_part.strip().lstrip("(").rstrip(")").split()
+                    return float(coords_str[1]), float(coords_str[0])
+            except Exception:
+                pass
+            try:
+                from geoalchemy2.shape import to_shape
+                shape = to_shape(geom)
+                return shape.y, shape.x
+            except Exception:
+                pass
+            return 0.0, 0.0
+
+        lat, lng = get_coords(last_ping.location)
         return {
-            "lat": shape.y,
-            "lng": shape.x,
+            "lat": lat,
+            "lng": lng,
             "speed": float(last_ping.speed) if last_ping.speed else None,
             "heading": float(last_ping.heading) if last_ping.heading else None,
             "updated_at": last_ping.pinged_at

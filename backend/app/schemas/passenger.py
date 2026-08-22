@@ -71,6 +71,7 @@ class RideRequestResponse(BaseModel):
     category: str
     status: str
     created_at: datetime.datetime
+    assignment_id: Optional[uuid.UUID] = None
 
     class Config:
         from_attributes = True

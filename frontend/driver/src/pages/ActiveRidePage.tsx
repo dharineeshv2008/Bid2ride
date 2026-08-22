@@ -66,7 +66,7 @@ export const ActiveRidePage: React.FC = () => {
   };
 
   useEffect(() => {
-    if (!assignmentId) return;
+    if (!assignmentId || assignmentId === 'undefined') return;
 
     const fetchAssignment = async () => {
       try {
@@ -80,11 +80,26 @@ export const ActiveRidePage: React.FC = () => {
       }
     };
     fetchAssignment();
+  }, [assignmentId]);
+
+  useEffect(() => {
+    if (!socket) return;
+    const handleCancelled = () => {
+      speak("Ride has been cancelled by the passenger.");
+      alert('The passenger has cancelled the ride.');
+      navigate('/dashboard');
+    };
+    socket.on('ride_cancelled', handleCancelled);
+    return () => {
+      socket.off('ride_cancelled', handleCancelled);
+    };
+  }, [socket, navigate]);
+
+  useEffect(() => {
+    if (!assignmentId || assignmentId === 'undefined' || !assignment) return;
 
     const interval = setInterval(() => {
       setDriverPos((prev) => {
-        if (!assignment) return prev;
-        
         const targetLat = status === 'DRIVER_ACCEPTED' ? assignment.pickup_lat : assignment.dropoff_lat;
         const targetLng = status === 'DRIVER_ACCEPTED' ? assignment.pickup_lng : assignment.dropoff_lng;
         
@@ -96,7 +111,8 @@ export const ActiveRidePage: React.FC = () => {
           return prev;
         }
 
-        const newHeading = (Math.atan2(lngDiff, latDiff) * 180) / Math.PI;
+        const rawHeading = (Math.atan2(lngDiff, latDiff) * 180) / Math.PI;
+        const newHeading = ((rawHeading % 360) + 360) % 360;
         setHeading(newHeading);
 
         const step = 0.001;
@@ -284,6 +300,46 @@ export const ActiveRidePage: React.FC = () => {
     }
   };
 
+  const handleCancelAssignment = async () => {
+    if (confirm('Are you sure you want to cancel this ride assignment? This will notify the passenger.')) {
+      setIsSubmitting(true);
+      try {
+        await api.post(`/rides/${assignmentId}/cancel`);
+        alert('Ride assignment cancelled.');
+        navigate('/dashboard');
+      } catch (err: any) {
+        alert(err.response?.data?.message || 'Failed to cancel assignment');
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
+  };
+
+  if (!assignmentId || assignmentId === 'undefined') {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 text-center bg-slate-900 rounded-3xl border border-slate-800 shadow-2xl max-w-md mx-auto mt-12 text-white">
+        <KeyRound className="w-12 h-12 text-rose-500 mb-4 animate-bounce" />
+        <h3 className="text-lg font-bold">Invalid Assignment ID</h3>
+        <p className="text-sm text-slate-400 mt-2">Active ride tracking ID is missing or invalid. Please check your dashboard.</p>
+        <button
+          onClick={() => navigate('/dashboard')}
+          className="mt-6 px-5 py-2.5 bg-emerald-500 text-slate-950 font-bold rounded-xl shadow-md hover:bg-emerald-400 transition-all text-xs"
+        >
+          Return to Dashboard
+        </button>
+      </div>
+    );
+  }
+
+  if (assignment === null) {
+    return (
+      <div className="flex flex-col items-center justify-center p-24 text-center text-white bg-slate-950 min-h-screen">
+        <Loader2 className="w-8 h-8 text-emerald-500 animate-spin mb-3" />
+        <p className="text-sm font-semibold text-slate-400">Loading ride assignment details...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="grid lg:grid-cols-12 gap-6 items-start pb-12">
       {/* Controls & Trip Stepper (Left Column) */}
@@ -321,7 +377,7 @@ export const ActiveRidePage: React.FC = () => {
           </div>
 
           {/* Action Triggers based on state machine */}
-          {status === 'DRIVER_ACCEPTED' && (
+          {['ACCEPTED', 'DRIVER_ACCEPTED'].includes(status) && (
             <button
               onClick={handleMarkArrived}
               disabled={isSubmitting}
@@ -331,7 +387,7 @@ export const ActiveRidePage: React.FC = () => {
             </button>
           )}
 
-          {status === 'DRIVER_ARRIVED' && (
+          {['ARRIVED', 'DRIVER_ARRIVED'].includes(status) && (
             <button
               onClick={() => setShowOtpModal(true)}
               className="w-full py-4 rounded-2xl bg-sky-500 hover:bg-sky-400 text-white font-extrabold shadow-glow flex items-center justify-center gap-2 transition-all"
@@ -348,6 +404,16 @@ export const ActiveRidePage: React.FC = () => {
               className="w-full py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold shadow-emerald-glow flex items-center justify-center gap-2 transition-all"
             >
               {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Complete Trip & Collect Payment'}
+            </button>
+          )}
+
+          {['ACCEPTED', 'DRIVER_ACCEPTED', 'ARRIVED', 'DRIVER_ARRIVED'].includes(status) && (
+            <button
+              onClick={handleCancelAssignment}
+              disabled={isSubmitting}
+              className="w-full py-3 mt-2 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 font-bold flex items-center justify-center gap-2 transition-all"
+            >
+              Cancel Ride
             </button>
           )}
         </div>

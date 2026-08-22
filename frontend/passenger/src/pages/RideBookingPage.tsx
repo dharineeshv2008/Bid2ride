@@ -52,6 +52,18 @@ const LIGHT_MAP_STYLE: maplibregl.StyleSpecification = {
   ]
 };
 
+const getHaversineDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const R = 6371; // km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+};
+
 export const RideBookingPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -212,9 +224,39 @@ export const RideBookingPage: React.FC = () => {
         setDropoffLng(lng);
       }
     } catch (err) {
-      console.error('Nominatim reverse geocode failed', err);
+      console.error('Nominatim reverse geocode failed, using coordinates fallback', err);
+      const fallbackAddress = `Map Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+      if (type === 'pickup') {
+        setPickup(fallbackAddress);
+        setPickupLat(lat);
+        setPickupLng(lng);
+      } else {
+        setDestination(fallbackAddress);
+        setDropoffLat(lat);
+        setDropoffLng(lng);
+      }
     }
   };
+
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setPickupLat(latitude);
+          setPickupLng(longitude);
+          handleReverseGeocode(latitude, longitude, 'pickup');
+          if (mapRef.current) {
+            mapRef.current.flyTo({ center: [longitude, latitude], zoom: 14 });
+          }
+        },
+        (error) => {
+          console.warn('Geolocation access blocked or failed, keeping default center', error);
+        },
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    }
+  }, []);
 
   const fetchSuggestions = async (val: string, type: 'pickup' | 'dest') => {
     if (type === 'pickup') setPickup(val);
@@ -239,6 +281,8 @@ export const RideBookingPage: React.FC = () => {
       else setDestSuggestions(data);
     } catch (err) {
       console.error('Nominatim search failed', err);
+      if (type === 'pickup') setPickupSuggestions([]);
+      else setDestSuggestions([]);
     }
   };
 
@@ -289,7 +333,13 @@ export const RideBookingPage: React.FC = () => {
         drawRoutes(routes);
       }
     } catch (err) {
-      console.error('OSRM routing request failed', err);
+      console.error('OSRM routing request failed, using haversine offline fallback', err);
+      const distance = getHaversineDistance(pLat, pLng, dLat, dLng) * 1.2; // 1.2 routing factor
+      setDistanceKm(distance);
+      setDurationSecs(distance * 60); // assume 1 minute per km
+      const multiplier = vehicles.find(v => v.id === vehicleCategory)?.multiplier || 1.0;
+      const baseFare = 50 + distance * 12 * multiplier;
+      setBudget(Math.round(baseFare));
     }
   };
 
@@ -341,7 +391,25 @@ export const RideBookingPage: React.FC = () => {
   const handleZoomIn = () => mapRef.current?.zoomIn();
   const handleZoomOut = () => mapRef.current?.zoomOut();
   const handleRecenter = () => {
-    if (mapRef.current) {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setPickupLat(latitude);
+          setPickupLng(longitude);
+          handleReverseGeocode(latitude, longitude, 'pickup');
+          if (mapRef.current) {
+            mapRef.current.flyTo({ center: [longitude, latitude], zoom: 14 });
+          }
+        },
+        (error) => {
+          console.warn('Geolocation failed, recentering on existing coordinates', error);
+          if (mapRef.current) {
+            mapRef.current.flyTo({ center: [pickupLng, pickupLat], zoom: 14 });
+          }
+        }
+      );
+    } else if (mapRef.current) {
       mapRef.current.flyTo({ center: [pickupLng, pickupLat], zoom: 14 });
     }
   };
@@ -363,6 +431,15 @@ export const RideBookingPage: React.FC = () => {
       return;
     }
 
+    if (!pickupLat || !pickupLng) {
+      setError('Invalid pickup location coordinates. Please select on map.');
+      return;
+    }
+    if (!dropoffLat || !dropoffLng) {
+      setError('Invalid drop-off location coordinates. Please select on map.');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -378,6 +455,8 @@ export const RideBookingPage: React.FC = () => {
         budget: budget,
         target_budget: budget,
       };
+
+      console.log('[RIDE BOOKING] Confirming ride booking request. Payload:', payload);
 
       const { data } = await api.post('/passenger/rides', payload);
       window.dispatchEvent(new Event('wallet_updated'));
@@ -415,7 +494,7 @@ export const RideBookingPage: React.FC = () => {
             </div>
             <button
               type="button"
-              onClick={() => navigate(activeRide.status === 'PENDING_BIDS' ? `/live-bids/${activeRide.id}` : `/tracking/${activeRide.id}`)}
+              onClick={() => navigate(activeRide.status === 'PENDING_BIDS' ? `/live-bids/${activeRide.id}` : `/tracking/${activeRide.assignment_id || activeRide.id}`)}
               className="px-3.5 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shrink-0 transition-all shadow-sm"
             >
               View Active Ride →
@@ -429,7 +508,7 @@ export const RideBookingPage: React.FC = () => {
             {error.includes('active ride') && activeRide && (
               <button
                 type="button"
-                onClick={() => navigate(activeRide.status === 'PENDING_BIDS' ? `/live-bids/${activeRide.id}` : `/tracking/${activeRide.id}`)}
+                onClick={() => navigate(activeRide.status === 'PENDING_BIDS' ? `/live-bids/${activeRide.id}` : `/tracking/${activeRide.assignment_id || activeRide.id}`)}
                 className="px-3 py-1.5 rounded-lg bg-rose-600 text-white font-bold text-[11px] hover:bg-rose-700 transition-colors inline-block"
               >
                 Go to Active Ride →

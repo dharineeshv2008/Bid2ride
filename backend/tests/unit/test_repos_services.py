@@ -42,14 +42,24 @@ async def test_base_repository_crud() -> None:
 # =====================================================================
 
 @pytest.mark.asyncio
-async def test_spatial_proximity_query() -> None:
-    """Verifies that DriverRepository executes ST_DWithin filters."""
+@patch("app.core.redis.redis_manager")
+async def test_spatial_proximity_query(mock_redis_manager) -> None:
+    """Verifies that DriverRepository executes Redis GEORADIUS."""
     mock_session = AsyncMock(spec=AsyncSession)
     mock_result = MagicMock()
-    # Mocking rows return
+    
+    driver_uuid = uuid.uuid4()
     mock_driver = MagicMock(spec=Driver)
-    mock_result.all.return_value = [(mock_driver, 1500.5)]
+    mock_driver.id = driver_uuid
+    mock_driver.rating = 5.0
+    mock_driver.acceptance_rate = 100.0
+    mock_result.scalars.return_value.all.return_value = [mock_driver]
     mock_session.execute.return_value = mock_result
+
+    # Mock Redis return
+    mock_redis_client = AsyncMock()
+    mock_redis_client.execute_command.return_value = [[str(driver_uuid).encode(), b"1500.5"]]
+    mock_redis_manager.client = mock_redis_client
 
     repo = DriverRepository(mock_session)
     drivers = await repo.find_nearby_online_drivers(37.7749, -122.4194, 3000.0)
@@ -57,6 +67,7 @@ async def test_spatial_proximity_query() -> None:
     assert len(drivers) == 1
     assert drivers[0][0] == mock_driver
     assert drivers[0][1] == 1500.5
+    assert mock_redis_client.execute_command.call_count == 1
     assert mock_session.execute.call_count == 1
 
 

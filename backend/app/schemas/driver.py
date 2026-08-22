@@ -35,7 +35,7 @@ class VehicleCreateRequest(BaseModel):
     year: int = Field(..., ge=2000, le=2028)
     color: str = Field(..., min_length=1, max_length=30)
     plate_number: str = Field(..., pattern=r"^[A-Z0-9\-]{2,20}$")
-    category: str = Field(..., pattern="^(ECONOMY|COMFORT|XL)$")
+    category: str = Field(..., pattern="^(ECONOMY|COMFORT|XL|SEDAN|SUV|LUXURY|AUTO)$")
 
 
 class VehicleUpdateRequest(BaseModel):
@@ -44,7 +44,7 @@ class VehicleUpdateRequest(BaseModel):
     year: Optional[int] = Field(None, ge=2000, le=2028)
     color: Optional[str] = Field(None, min_length=1, max_length=30)
     plate_number: Optional[str] = Field(None, pattern=r"^[A-Z0-9\-]{2,20}$")
-    category: Optional[str] = Field(None, pattern="^(ECONOMY|COMFORT|XL)$")
+    category: Optional[str] = Field(None, pattern="^(ECONOMY|COMFORT|XL|SEDAN|SUV|LUXURY|AUTO)$")
 
 
 class VehicleResponse(BaseModel):

@@ -137,7 +137,11 @@ async def get_user_profile(
     repo = UserProfileRepository(db)
     profile = await repo.get_or_create(current_user.id)
     await db.commit()
-    await db.refresh(profile)
+    if profile in db:
+        try:
+            await db.refresh(profile)
+        except Exception:
+            pass
     return _build_profile_response(profile, current_user)
 
 
@@ -152,8 +156,16 @@ async def update_user_profile(
     repo = UserProfileRepository(db)
     profile = await repo.update(current_user.id, data)
     await db.commit()
-    await db.refresh(profile)
-    await db.refresh(current_user)
+    if profile in db:
+        try:
+            await db.refresh(profile)
+        except Exception:
+            pass
+    if current_user in db:
+        try:
+            await db.refresh(current_user)
+        except Exception:
+            pass
     return _build_profile_response(profile, current_user)
 
 
@@ -167,7 +179,11 @@ async def upload_profile_photo(
     repo = UserProfileRepository(db)
     profile = await repo.update_photo(current_user.id, data.photo_base64)
     await db.commit()
-    await db.refresh(profile)
+    if profile in db:
+        try:
+            await db.refresh(profile)
+        except Exception:
+            pass
     return _build_profile_response(profile, current_user)
 
 

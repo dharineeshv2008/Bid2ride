@@ -7,12 +7,12 @@ import { formatCurrency } from '../utils/format';
 export const EarningsPage: React.FC = () => {
   const [timeframe, setTimeframe] = useState<'today' | 'week' | 'month'>('week');
   const [stats, setStats] = useState({
-    totalEarnings: 1248.50,
-    completedTrips: 42,
-    onlineHours: 34.5,
-    averagePerTrip: 29.72,
-    acceptanceRate: 94,
-    rating: 4.92,
+    totalEarnings: 0.00,
+    completedTrips: 0,
+    onlineHours: 0.0,
+    averagePerTrip: 0.00,
+    acceptanceRate: 100,
+    rating: 5.00,
   });
   const [loading, setLoading] = useState(false);
 
@@ -20,12 +20,12 @@ export const EarningsPage: React.FC = () => {
     const fetchEarnings = async () => {
       setLoading(true);
       try {
-        const response = await api.get(`/drivers/earnings?timeframe=${timeframe}`);
+        const response = await api.get(`/driver/earnings?timeframe=${timeframe}`);
         if (response.data) {
           setStats(response.data);
         }
       } catch (err) {
-        console.warn('Using default earnings stats:', err);
+        console.warn('Failed to fetch earnings stats:', err);
       } finally {
         setLoading(false);
       }

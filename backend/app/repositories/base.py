@@ -14,9 +14,11 @@ class BaseRepository(Generic[ModelType]):
         self.model = model
         self.session = session
 
-    async def get(self, id: Any) -> Optional[ModelType]:
+    async def get(self, id: Any, for_update: bool = False) -> Optional[ModelType]:
         """Retrieves a single record by primary key."""
         stmt = select(self.model).where(self.model.id == id)
+        if for_update:
+            stmt = stmt.with_for_update()
         result = await self.session.execute(stmt)
         return result.scalars().first()
 

@@ -32,8 +32,14 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setIsConnected(false);
       };
 
+      const onReconnect = () => {
+        console.log('[SOCKET DEBUG] Reconnected to server');
+        setIsConnected(true);
+      };
+
       s.on('connect', onConnect);
       s.on('disconnect', onDisconnect);
+      s.on('reconnect', onReconnect);
 
       if (s.connected) {
         onConnect();
@@ -42,6 +48,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return () => {
         s.off('connect', onConnect);
         s.off('disconnect', onDisconnect);
+        s.off('reconnect', onReconnect);
         disconnectSocket();
       };
     } else {

@@ -31,30 +31,76 @@ class DriverRepository(BaseRepository[Driver]):
         self,
         lat: float,
         lng: float,
-        radius_meters: float = 3000.0
+        radius_meters: float = 50000.0
     ) -> List[Tuple[Driver, float]]:
-        """Queries the database using PostGIS to find online drivers in a specified radius."""
-        point = f"SRID=4326;POINT({lng} {lat})"
-        geom_wkt = WKTElement(point, srid=4326)
+        """Queries Redis using GEORADIUS to find online drivers in a specified radius."""
+        from app.core.redis import redis_manager
+        
+        if not redis_manager.client:
+            return []
 
-        # Query drivers within radius
-        stmt = (
-            select(
-                Driver,
-                ST_Distance(Driver.current_location, geom_wkt).label("distance")
+        # Find drivers in Redis
+        # Returns: [[b'driver_id', b'distance'], ...]
+        try:
+            results = await redis_manager.client.execute_command(
+                "GEORADIUS", "driver_locations", lng, lat, radius_meters, "m", "WITHDIST", "ASC"
             )
+        except Exception as e:
+            return []
+
+        if not results:
+            return []
+            
+        driver_id_map = {}
+        for row in results:
+            driver_id_str = row[0].decode('utf-8') if isinstance(row[0], bytes) else row[0]
+            distance = float(row[1])
+            driver_id_map[uuid.UUID(driver_id_str)] = distance
+
+        driver_ids = list(driver_id_map.keys())
+        if not driver_ids:
+            return []
+
+        # Fetch active drivers from DB
+        from app.models.ride import RideAssignment
+        from sqlalchemy import exists, select
+        from sqlalchemy.orm import selectinload
+
+        active_assign_exists = exists().where(
+            RideAssignment.driver_id == Driver.id,
+            RideAssignment.status.in_(["ACCEPTED", "ARRIVED", "IN_PROGRESS"])
+        )
+
+        stmt = (
+            select(Driver)
             .options(selectinload(Driver.active_vehicle))
             .where(
+                Driver.id.in_(driver_ids),
                 Driver.online_status == True,
                 Driver.verification_status == "APPROVED",
-                ST_DWithin(Driver.current_location, geom_wkt, radius_meters)
+                ~active_assign_exists
             )
-            .order_by(text("distance ASC"))
         )
         
-        result = await self.session.execute(stmt)
-        rows = result.all()
-        return [(row[0], float(row[1])) for row in rows]
+        db_result = await self.session.execute(stmt)
+        drivers = list(db_result.scalars().all())
+
+        # Combine and sort
+        combined = []
+        for d in drivers:
+            dist = driver_id_map.get(d.id, 0.0)
+            combined.append((d, dist))
+
+        # Priority sorting: distance (asc), rating (desc), acceptance_rate (desc)
+        def sort_key(row):
+            driver = row[0]
+            dist = row[1]
+            rating = float(getattr(driver, "rating", 5.0) or 5.0)
+            acc_rate = float(getattr(driver, "acceptance_rate", 100.0) or 100.0)
+            return (dist, -rating, -acc_rate)
+            
+        combined.sort(key=sort_key)
+        return combined
 
 
 class VehicleRepository(BaseRepository[Vehicle]):

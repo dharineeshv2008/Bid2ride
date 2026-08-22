@@ -5,11 +5,11 @@ from pydantic import BaseModel, Field
 
 
 class RideAssignmentResponse(BaseModel):
-    id: uuid.UUID
+    id: Optional[uuid.UUID] = None
     request_id: uuid.UUID
-    driver_id: uuid.UUID
+    driver_id: Optional[uuid.UUID] = None
     status: str
-    price: float
+    price: Optional[float] = None
     created_at: datetime.datetime
     pickup_address: Optional[str] = None
     pickup_lat: Optional[float] = None
@@ -40,7 +40,7 @@ class DriverLocationUpdateRequest(BaseModel):
     lat: float = Field(..., ge=-90.0, le=90.0)
     lng: float = Field(..., ge=-180.0, le=180.0)
     speed: Optional[float] = Field(None, ge=0.0)
-    heading: Optional[float] = Field(None, ge=0.0, le=360.0)
+    heading: Optional[float] = Field(None, ge=-360.0, le=360.0)
 
 
 class PassengerLiveLocationResponse(BaseModel):

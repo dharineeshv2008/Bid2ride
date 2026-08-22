@@ -33,7 +33,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     db_alive = False
     try:
-        db_alive = await check_database_health()
+        if settings.ASYNC_DATABASE_URI and "sqlite" in settings.ASYNC_DATABASE_URI.lower():
+            from app.models.base import Base
+            from app.core.database import engine
+            import app.models
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            db_alive = True
+        else:
+            db_alive = await check_database_health()
     except Exception as e:
         logger.warning(f"Database health check warning during startup: {e}")
     
@@ -46,9 +54,34 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception:
         pass
     
+    import asyncio
+    async def periodic_cleanup_task():
+        while True:
+            try:
+                await asyncio.sleep(60)
+                from app.core.database import SessionLocal
+                async with SessionLocal() as session:
+                    import datetime
+                    from sqlalchemy import update
+                    from app.models.ride import RideRequest
+                    threshold = datetime.datetime.utcnow() - datetime.timedelta(seconds=120)
+                    stmt = update(RideRequest).where(
+                        RideRequest.status == "PENDING_BIDS",
+                        RideRequest.created_at < threshold
+                    ).values(status="EXPIRED")
+                    await session.execute(stmt)
+                    await session.commit()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning(f"Background cleanup task error: {e}")
+
+    cleanup_bg_job = asyncio.create_task(periodic_cleanup_task())
+
     yield
     
     # SHUTDOWN
+    cleanup_bg_job.cancel()
     try:
         await redis_manager.close()
     except Exception:
@@ -129,14 +162,30 @@ async def domain_exception_handler(request: Request, exc: Bid2RideException) -> 
 # Exception Handler: Request Body Validation Errors
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
-    logger.error("Request validation failed", path=request.url.path, errors=exc.errors())
+    errors = exc.errors()
+    # Check if validation failed because 'undefined' was passed instead of a valid UUID
+    for error in errors:
+        inp = error.get("input")
+        if isinstance(inp, str) and inp.lower() == "undefined":
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "status": "error",
+                    "code": "UNDEFINED_ID_PARAMETER",
+                    "message": "Required ID parameter in path is undefined or missing.",
+                    "details": errors,
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                }
+            )
+            
+    logger.error("Request validation failed", path=request.url.path, errors=errors)
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
             "status": "error",
             "code": "VALIDATION_ERROR",
             "message": "Input validation failed. Please check payload details.",
-            "details": exc.errors(),
+            "details": errors,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         }
     )

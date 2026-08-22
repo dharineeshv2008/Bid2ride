@@ -1,6 +1,7 @@
 import uuid
 from typing import List, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from app.core.exceptions import EntityNotFoundException, ValidationException, InsufficientWalletBalanceException
 from app.services.base import BaseService
@@ -80,64 +81,84 @@ class PaymentService(BaseService):
         passenger_user_id: uuid.UUID,
         driver_user_id: uuid.UUID,
         amount: float,
-        commission_rate: float = 0.15
+        commission_rate: float = 0.15,
+        idempotency_key: str = None
     ) -> Tuple[Payment, Wallet, Wallet]:
         """Settles ride charges using pessimistic FOR UPDATE row locks."""
-        passenger_wallet = await self.wallet_repo.get_by_user_id(passenger_user_id, for_update=True)
-        driver_wallet = await self.wallet_repo.get_by_user_id(driver_user_id, for_update=True)
+        try:
+            passenger_wallet = await self.wallet_repo.get_by_user_id(passenger_user_id, for_update=True)
+            driver_wallet = await self.wallet_repo.get_by_user_id(driver_user_id, for_update=True)
 
-        if not passenger_wallet or not driver_wallet:
-            raise EntityNotFoundException("Passenger or Driver wallet not initialized")
+            if not passenger_wallet or not driver_wallet:
+                raise EntityNotFoundException("Passenger or Driver wallet not initialized")
 
-        # Check balance
-        if float(passenger_wallet.balance) < float(amount):
-            raise InsufficientWalletBalanceException("Insufficient wallet balance to cover trip charges")
+            # Check balance
+            if float(passenger_wallet.balance) < float(amount):
+                raise InsufficientWalletBalanceException("Insufficient wallet balance to cover trip charges")
 
-        commission = float(amount) * commission_rate
-        driver_payout = float(amount) - commission
+            commission = float(amount) * commission_rate
+            driver_payout = float(amount) - commission
 
-        # Update Passenger Wallet
-        passenger_wallet.balance = float(passenger_wallet.balance) - float(amount)
-        # Update Driver Wallet
-        driver_wallet.balance = float(driver_wallet.balance) + driver_payout
+            # Update Passenger Wallet
+            passenger_wallet.balance = float(passenger_wallet.balance) - float(amount)
+            # Update Driver Wallet
+            driver_wallet.balance = float(driver_wallet.balance) + driver_payout
 
-        # Record Payment
-        payment = await self.repo.create({
-            "assignment_id": assignment_id,
-            "amount": amount,
-            "commission_fee": commission,
-            "status": "COMPLETED",
-            "method": "WALLET",
-            "transaction_id": f"TXN-BID-{uuid.uuid4().hex[:12].upper()}"
-        })
-        await self.session.flush()  # Populates payment.id
+            # Enforce Wallet Consistency (no negative balance allowed)
+            if float(passenger_wallet.balance) < 0 or float(driver_wallet.balance) < 0:
+                raise ValidationException("Wallet balance cannot drop below zero")
 
-        # Write passenger debit ledger
-        await self.ledger_repo.create({
-            "wallet_id": passenger_wallet.id,
-            "amount": amount,
-            "type": "DEBIT",
-            "transaction_purpose": "DEBIT",
-            "payment_id": payment.id
-        })
+            # Record Payment
+            payment = await self.repo.create({
+                "assignment_id": assignment_id,
+                "amount": amount,
+                "commission_fee": commission,
+                "status": "COMPLETED",
+                "method": "WALLET",
+                "transaction_id": f"TXN-BID-{uuid.uuid4().hex[:12].upper()}",
+                "idempotency_key": idempotency_key
+            })
+            await self.session.flush()  # Populates payment.id
 
-        # Write driver credit ledger
-        await self.ledger_repo.create({
-            "wallet_id": driver_wallet.id,
-            "amount": driver_payout,
-            "type": "CREDIT",
-            "transaction_purpose": "RIDE_EARNING",
-            "payment_id": payment.id
-        })
+            # Write passenger debit ledger
+            await self.ledger_repo.create({
+                "wallet_id": passenger_wallet.id,
+                "amount": amount,
+                "type": "DEBIT",
+                "transaction_purpose": "DEBIT",
+                "payment_id": payment.id
+            })
 
-        # Write system commission ledger (deducted from driver flow)
-        await self.ledger_repo.create({
-            "wallet_id": driver_wallet.id,
-            "amount": commission,
-            "type": "DEBIT",
-            "transaction_purpose": "COMMISSION",
-            "payment_id": payment.id
-        })
+            # Write driver credit ledger
+            await self.ledger_repo.create({
+                "wallet_id": driver_wallet.id,
+                "amount": driver_payout,
+                "type": "CREDIT",
+                "transaction_purpose": "RIDE_EARNING",
+                "payment_id": payment.id
+            })
 
-        await self.commit()
-        return payment, passenger_wallet, driver_wallet
+            # Write system commission ledger (deducted from driver flow)
+            await self.ledger_repo.create({
+                "wallet_id": driver_wallet.id,
+                "amount": commission,
+                "type": "DEBIT",
+                "transaction_purpose": "COMMISSION",
+                "payment_id": payment.id
+            })
+
+            await self.commit()
+            return payment, passenger_wallet, driver_wallet
+        except IntegrityError:
+            await self.session.rollback()
+            if idempotency_key:
+                existing_payment = await self.repo.get_by_idempotency_key(idempotency_key)
+                if existing_payment:
+                    # Fetch wallets without lock to return
+                    p_wallet = await self.wallet_repo.get_by_user_id(passenger_user_id)
+                    d_wallet = await self.wallet_repo.get_by_user_id(driver_user_id)
+                    return existing_payment, p_wallet, d_wallet
+            raise
+        except Exception as e:
+            await self.session.rollback()
+            raise e

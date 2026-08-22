@@ -77,6 +77,17 @@ export const HistoryPage: React.FC = () => {
     return true;
   });
 
+  const handleCancelRide = async (rideId: string) => {
+    if (confirm('Are you sure you want to cancel this ride request?')) {
+      try {
+        await api.post(`/passenger/rides/${rideId}/cancel`);
+        fetchRides(skip);
+      } catch (err: any) {
+        alert(err.response?.data?.message || 'Failed to cancel ride');
+      }
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-12">
       {/* Header & Filter Tabs */}
@@ -207,13 +218,23 @@ export const HistoryPage: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                <div className="text-right shrink-0">
-                  <span className="text-lg font-extrabold text-gray-900">
-                    {formatCurrency(ride.budget)}
-                  </span>
-                  <span className={`block text-[10px] font-bold uppercase mt-0.5 px-2 py-0.5 rounded-full border ${statusCfg.bg} ${statusCfg.color} ${statusCfg.border}`}>
-                    {statusCfg.label}
-                  </span>
+                <div className="flex items-center gap-4 text-right shrink-0">
+                  {['PENDING_BIDS', 'MATCHED'].includes(ride.status) && (
+                    <button
+                      onClick={() => handleCancelRide(ride.id)}
+                      className="px-3 py-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 font-bold text-[10px] border border-rose-200 uppercase transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                  <div>
+                    <span className="text-lg font-extrabold text-gray-900">
+                      {formatCurrency(ride.budget)}
+                    </span>
+                    <span className={`block text-[10px] font-bold uppercase mt-0.5 px-2 py-0.5 rounded-full border ${statusCfg.bg} ${statusCfg.color} ${statusCfg.border}`}>
+                      {statusCfg.label}
+                    </span>
+                  </div>
                 </div>
               </div>
             );

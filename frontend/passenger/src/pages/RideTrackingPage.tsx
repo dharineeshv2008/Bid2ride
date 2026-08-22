@@ -43,6 +43,13 @@ export const RideTrackingPage: React.FC = () => {
   const [driverLocation, setDriverLocation] = useState<LiveLocation | null>(null);
   const [status, setStatus] = useState<string>('DRIVER_ACCEPTED');
   const [isCompleting, setIsCompleting] = useState(false);
+  const [error, setError] = useState<string>('');
+
+  useEffect(() => {
+    if (!assignmentId || assignmentId === 'undefined') {
+      navigate('/dashboard');
+    }
+  }, [assignmentId, navigate]);
 
   // MapLibre references
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -50,18 +57,30 @@ export const RideTrackingPage: React.FC = () => {
   const driverMarkerRef = useRef<maplibregl.Marker | null>(null);
 
   useEffect(() => {
-    if (!assignmentId) return;
+    if (!assignmentId || assignmentId === 'undefined') return;
+
+    let retryCount = 0;
+    let timerId: any = null;
 
     const fetchAssignment = async () => {
       try {
         const { data } = await api.get(`/rides/${assignmentId}`);
         setAssignment(data);
         setStatus(data.status);
+        setError('');
+        if (timerId) clearInterval(timerId);
       } catch (err) {
-        console.error('Failed to load ride details', err);
+        console.error(`Failed to load ride details (Attempt ${retryCount + 1})`, err);
+        retryCount += 1;
+        if (retryCount >= 10) {
+          if (timerId) clearInterval(timerId);
+          setError('Failed to locate active ride assignment after several attempts.');
+        }
       }
     };
+
     fetchAssignment();
+    timerId = setInterval(fetchAssignment, 2000);
 
     if (socket) {
       socket.on('driver_location_updated', (data: LiveLocation) => {
@@ -80,13 +99,24 @@ export const RideTrackingPage: React.FC = () => {
         setStatus('COMPLETED');
       });
 
+      socket.on('ride_cancelled', () => {
+        alert('Ride was cancelled by the driver.');
+        navigate('/dashboard');
+      });
+
       return () => {
+        if (timerId) clearInterval(timerId);
         socket.off('driver_location_updated');
         socket.off('driver_arrived');
         socket.off('ride_started');
         socket.off('ride_completed');
+        socket.off('ride_cancelled');
       };
     }
+
+    return () => {
+      if (timerId) clearInterval(timerId);
+    };
   }, [assignmentId, socket]);
 
   // Initialize map when assignment loads
@@ -226,6 +256,43 @@ export const RideTrackingPage: React.FC = () => {
     }
   };
 
+  const handleCancelRide = async () => {
+    if (confirm('Are you sure you want to cancel this ride?')) {
+      try {
+        // backend passenger cancel endpoint allows assignmentId
+        await api.post(`/passenger/rides/${assignmentId}/cancel`);
+        navigate('/dashboard');
+      } catch (err) {
+        alert('Failed to cancel ride');
+      }
+    }
+  };
+
+  if (!assignmentId || assignmentId === 'undefined' || error) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 text-center bg-white rounded-2xl border border-gray-200 shadow-sm max-w-md mx-auto mt-12">
+        <ShieldAlert className="w-12 h-12 text-rose-500 mb-4 animate-bounce" />
+        <h3 className="text-lg font-bold text-gray-900">Invalid Tracking ID</h3>
+        <p className="text-sm text-gray-500 mt-2">{error || "We couldn't retrieve tracking information because the ride tracking ID is missing or invalid."}</p>
+        <button
+          onClick={() => navigate('/dashboard')}
+          className="mt-6 px-5 py-2.5 bg-[#0EA5E9] text-white font-bold rounded-xl shadow-md hover:bg-[#0284C7] transition-all text-xs"
+        >
+          Return to Dashboard
+        </button>
+      </div>
+    );
+  }
+
+  if (assignment === null) {
+    return (
+      <div className="flex flex-col items-center justify-center p-24 text-center">
+        <Loader2 className="w-8 h-8 text-[#0EA5E9] animate-spin mb-3" />
+        <p className="text-sm font-semibold text-gray-550">Loading ride tracking details...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="grid lg:grid-cols-12 gap-6 items-start pb-12">
       {/* Ride Controls & Status Drawer (Left Column) */}
@@ -290,10 +357,20 @@ export const RideTrackingPage: React.FC = () => {
               {isCompleting ? <Loader2 className="w-5 h-5 animate-spin" /> : `Settle Payment (${formatCurrency(assignment?.price || 150.00)})`}
             </button>
           ) : (
-            <button className="w-full py-3 rounded-2xl bg-rose-50 dark:bg-rose-950/20 hover:bg-rose-100 dark:hover:bg-rose-900/20 text-rose-600 dark:text-rose-400 font-bold text-xs border border-rose-200 dark:border-rose-900/40 flex items-center justify-center gap-2 transition-colors">
-              <ShieldAlert className="w-4 h-4" />
-              Emergency SOS Help
-            </button>
+            <div className="flex gap-3">
+              <button className="flex-1 py-3 rounded-2xl bg-rose-50 dark:bg-rose-950/20 hover:bg-rose-100 dark:hover:bg-rose-900/20 text-rose-600 dark:text-rose-400 font-bold text-xs border border-rose-200 dark:border-rose-900/40 flex items-center justify-center gap-2 transition-colors">
+                <ShieldAlert className="w-4 h-4" />
+                Emergency SOS
+              </button>
+              {status !== 'CANCELLED' && (
+                <button
+                  onClick={handleCancelRide}
+                  className="flex-1 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-2 transition-colors"
+                >
+                  Cancel Ride
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>

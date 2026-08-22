@@ -118,7 +118,7 @@ async def test_complete_e2e_bid2ride_lifecycle(db_session):
         }, headers=driver_headers)
         assert veh_res.status_code in [200, 201]
 
-        avail_res = await ac.put("/api/v1/driver/availability", json={"online_status": True}, headers=driver_headers)
+        avail_res = await ac.put("/api/v1/driver/availability", json={"online_status": True, "lat": 37.7749, "lng": -122.4194}, headers=driver_headers)
         assert avail_res.status_code == 200
         assert avail_res.json()["online_status"] is True
 

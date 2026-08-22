@@ -1,4 +1,5 @@
 import uuid
+import datetime
 from typing import List, Tuple
 from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
@@ -40,10 +41,14 @@ async def settle_ride_payment_endpoint(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict:
-    """Settles ride charges using passenger wallet balance (secured by Redis idempotency locks)."""
     # 1. Acquire Redis distributed idempotency lock
     lock_key = f"payment_lock:{payload.idempotency_key}"
-    acquired = await redis_manager.client.set(lock_key, "locked", ex=30, nx=True)
+    acquired = True
+    if redis_manager.client:
+        try:
+            acquired = await redis_manager.client.set(lock_key, "locked", ex=30, nx=True)
+        except Exception:
+            acquired = True
     if not acquired:
         raise ValidationException("Concurrent payment settlement request in progress. Please retry.")
 
@@ -97,7 +102,11 @@ async def settle_ride_payment_endpoint(
         }
     finally:
         # Release lock
-        await redis_manager.client.delete(lock_key)
+        if redis_manager.client:
+            try:
+                await redis_manager.client.delete(lock_key)
+            except Exception:
+                pass
 
 
 @router.get("/history", response_model=PaymentHistoryResponse)
@@ -198,7 +207,12 @@ async def process_refund(
 
     # Idempotency lock
     lock_key = f"refund_lock:{payload.idempotency_key}"
-    acquired = await redis_manager.client.set(lock_key, "locked", ex=30, nx=True)
+    acquired = True
+    if redis_manager.client:
+        try:
+            acquired = await redis_manager.client.set(lock_key, "locked", ex=30, nx=True)
+        except Exception:
+            acquired = True
     if not acquired:
         raise ValidationException("Concurrent refund request in progress. Please retry.")
 
@@ -276,4 +290,8 @@ async def process_refund(
             "created_at": datetime.datetime.utcnow()
         }
     finally:
-        await redis_manager.client.delete(lock_key)
+        if redis_manager.client:
+            try:
+                await redis_manager.client.delete(lock_key)
+            except Exception:
+                pass

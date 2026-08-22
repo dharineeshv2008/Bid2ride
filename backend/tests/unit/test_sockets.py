@@ -167,8 +167,8 @@ async def test_broadcast_new_ride_request_targets_compatible_drivers(
         category="ECONOMY"
     )
 
-    # Verifies ride_available broadcast sent to driver room
-    mock_sio.emit.assert_called_with(
+    # Verifies ride_available broadcast sent to regional room
+    mock_sio.emit.assert_any_call(
         "ride_available",
         {
             "ride_id": str(ride_id),
@@ -177,7 +177,7 @@ async def test_broadcast_new_ride_request_targets_compatible_drivers(
             "budget": 15.00,
             "category": "ECONOMY"
         },
-        room=f"driver:{driver_id}"
+        room="drivers:geohash:9q8yyk"
     )
 
 

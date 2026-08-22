@@ -41,6 +41,29 @@ def _geom_to_coords(geom: Any) -> tuple[float, float]:
     except Exception:
         pass
 
+    # Try custom binary EWKB/WKB POINT parser
+    try:
+        import struct
+        wkb_bytes = None
+        if hasattr(geom, "data"):
+            wkb_bytes = geom.data
+        elif isinstance(geom, (str, bytes)):
+            wkb_bytes = geom
+            
+        if isinstance(wkb_bytes, str):
+            wkb_bytes = bytes.fromhex(wkb_bytes.strip())
+            
+        if isinstance(wkb_bytes, bytes) and len(wkb_bytes) >= 21:
+            byte_order = '<' if wkb_bytes[0] == 1 else '>'
+            geom_type = struct.unpack(byte_order + 'I', wkb_bytes[1:5])[0]
+            has_srid = bool(geom_type & 0x20000000)
+            offset = 9 if has_srid else 5
+            if len(wkb_bytes) >= offset + 16:
+                x, y = struct.unpack(byte_order + 'dd', wkb_bytes[offset:offset+16])
+                return float(y), float(x)
+    except Exception:
+        pass
+
     try:
         str_val = str(geom)
         if "POINT" in str_val:
@@ -146,6 +169,8 @@ async def list_nearby_online_drivers(
     from app.models.driver import Driver
     import datetime
 
+    from geoalchemy2 import Geography
+    from sqlalchemy import cast
     point = f"SRID=4326;POINT({lng} {lat})"
     geom_wkt = WKTElement(point, srid=4326)
 
@@ -156,7 +181,7 @@ async def list_nearby_online_drivers(
             Driver.online_status == True,
             Driver.verification_status == "APPROVED",
             Driver.current_location.isnot(None),
-            ST_DWithin(Driver.current_location, geom_wkt, radius)
+            ST_DWithin(cast(Driver.current_location, Geography), cast(geom_wkt, Geography), radius)
         )
         .order_by(Driver.rating.desc())
         .limit(50)
@@ -353,6 +378,18 @@ async def get_active_ride(
 
     pickup_lat, pickup_lng = _geom_to_coords(active.pickup_location)
     dropoff_lat, dropoff_lng = _geom_to_coords(active.dropoff_location)
+
+    # Fetch assignment_id if matched/assigned
+    from app.models.ride import RideAssignment
+    from sqlalchemy import select
+    assignment_id = None
+    if active.status != "PENDING_BIDS":
+        stmt = select(RideAssignment).where(RideAssignment.request_id == active.id)
+        res = await db.execute(stmt)
+        assignment = res.scalars().first()
+        if assignment:
+            assignment_id = assignment.id
+
     return {
         "id": active.id,
         "pickup_address": active.pickup_address,
@@ -364,7 +401,8 @@ async def get_active_ride(
         "budget": float(active.budget),
         "category": active.category,
         "status": active.status,
-        "created_at": active.created_at
+        "created_at": active.created_at,
+        "assignment_id": assignment_id
     }
 
 
@@ -527,7 +565,8 @@ async def accept_driver_bid(
             "id": assignment.id,
             "assignment_id": assignment.id,
             "otp": assignment.otp,
-            "price": float(assignment.price_charged)
+            "price": float(assignment.price_charged),
+            "ride_id": str(assignment.request_id)
         }
     }
 
@@ -554,22 +593,46 @@ async def accept_bid_direct(
 @router.post("/rides/{ride_id}/cancel", status_code=status.HTTP_200_OK)
 async def cancel_ride_request(
     ride_id: uuid.UUID,
-    payload: RideCancellationRequest,
+    payload: RideCancellationRequest = RideCancellationRequest(),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     _role=passenger_role_dependency
 ) -> dict:
     """Cancels an active ride request (verifies ownership)."""
     from app.repositories.ride_repository import RideRepository
+    from app.models.ride import RideAssignment
+    from sqlalchemy import select
+
     repo = RideRepository(RideRequest, db)
     ride = await repo.get(ride_id)
     
+    assignment = None
+    if not ride:
+        from app.repositories.base import BaseRepository
+        assign_repo = BaseRepository(RideAssignment, db)
+        assignment = await assign_repo.get(ride_id)
+        if assignment:
+            ride = await repo.get(assignment.request_id)
+            logger.info(f"[CANCEL RESILIENCY] Resolved ride {ride.id} from assignment_id {ride_id}")
+
     if not ride or ride.passenger_id != current_user.id:
         raise EntityNotFoundException("Ride request not found")
 
-    if ride.status not in ["PENDING_BIDS", "MATCHED"]:
+    if ride.status not in ["PENDING_BIDS", "MATCHED", "ACCEPTED"]:
         raise PermissionDeniedException("Ride request cannot be cancelled from the current state")
 
     ride.status = "CANCELLED"
+    
+    if not assignment:
+        stmt = select(RideAssignment).where(RideAssignment.request_id == ride.id)
+        res = await db.execute(stmt)
+        assignment = res.scalars().first()
+        
+    if assignment:
+        assignment.status = "CANCELLED"
+        from app.services.socket_service import sio
+        await sio.emit("ride_cancelled", {"assignment_id": str(assignment.id)}, room=f"driver:{assignment.driver_id}")
+        logger.info(f"[CANCEL LOG] Cancelled associated assignment {assignment.id} for ride {ride.id}")
+
     await db.commit()
     return {"status": "success", "message": "Ride request cancelled successfully"}

@@ -115,7 +115,12 @@ class NotificationService(BaseService):
     async def get_preferences(self, user_id: uuid.UUID) -> Dict[str, bool]:
         """Loads user notification preferences (caches in Redis)."""
         key = f"notification_preferences:{user_id}"
-        raw = await redis_manager.client.get(key)
+        raw = None
+        if redis_manager.client:
+            try:
+                raw = await redis_manager.client.get(key)
+            except Exception:
+                pass
         if not raw:
             # Default preferences: all channels enabled
             default_pref = {
@@ -124,7 +129,11 @@ class NotificationService(BaseService):
                 "push_enabled": True,
                 "in_app_enabled": True
             }
-            await redis_manager.client.set(key, json.dumps(default_pref))
+            if redis_manager.client:
+                try:
+                    await redis_manager.client.set(key, json.dumps(default_pref))
+                except Exception:
+                    pass
             return default_pref
         return json.loads(raw)
 
@@ -136,7 +145,11 @@ class NotificationService(BaseService):
                 current[k] = v
 
         key = f"notification_preferences:{user_id}"
-        await redis_manager.client.set(key, json.dumps(current))
+        if redis_manager.client:
+            try:
+                await redis_manager.client.set(key, json.dumps(current))
+            except Exception:
+                pass
         return current
 
     # =====================================================================

@@ -67,6 +67,8 @@ export interface RideRequest {
   created_at: string;
   passenger_name?: string;
   passenger_rating?: number;
+  distance_km?: number;
+  distance?: number;
 }
 
 export interface DriverBid {

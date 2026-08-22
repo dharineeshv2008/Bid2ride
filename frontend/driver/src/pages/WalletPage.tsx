@@ -9,23 +9,74 @@ export const WalletPage: React.FC = () => {
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Cash Out State
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState('100');
+  const [upiId, setUpiId] = useState('');
+  const [withdrawSuccess, setWithdrawSuccess] = useState(false);
+  const [withdrawError, setWithdrawError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const fetchWalletData = async () => {
+    try {
+      const [walletRes, historyRes] = await Promise.all([
+        api.get<Wallet>('/wallet'),
+        api.get<{ items: WalletTransaction[] }>('/wallet/history'),
+      ]);
+      setWallet(walletRes.data);
+      setTransactions(historyRes.data.items);
+    } catch (err) {
+      console.error('Failed to load wallet data', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchWalletData = async () => {
-      try {
-        const [walletRes, historyRes] = await Promise.all([
-          api.get<Wallet>('/wallet'),
-          api.get<{ items: WalletTransaction[] }>('/wallet/history'),
-        ]);
-        setWallet(walletRes.data);
-        setTransactions(historyRes.data.items);
-      } catch (err) {
-        console.error('Failed to load wallet data', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
     fetchWalletData();
   }, []);
+
+  const handleWithdraw = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amountNum = parseFloat(withdrawAmount);
+    if (isNaN(amountNum) || amountNum < 10) {
+      setWithdrawError('Minimum withdrawal amount is ₹10.00');
+      return;
+    }
+    if (!upiId) {
+      setWithdrawError('UPI ID / Account Details required');
+      return;
+    }
+    setWithdrawError('');
+    setIsSubmitting(true);
+    try {
+      await api.post('/wallet/withdraw', {
+        amount: amountNum,
+        account_details: upiId
+      });
+
+      await fetchWalletData();
+
+      setWithdrawSuccess(true);
+      setTimeout(() => {
+        setWithdrawSuccess(false);
+        setShowWithdrawModal(false);
+      }, 1500);
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.response?.data?.detail || 'Withdrawal failed. Please try again.';
+      setWithdrawError(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const openWithdrawModal = () => {
+    setWithdrawError('');
+    setWithdrawSuccess(false);
+    setWithdrawAmount('100');
+    setUpiId('');
+    setShowWithdrawModal(true);
+  };
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -36,11 +87,14 @@ export const WalletPage: React.FC = () => {
             Available Driver Balance
           </span>
           <h2 className="text-3xl sm:text-4xl font-extrabold font-display">
-            {formatCurrency(wallet?.balance ?? 210.00)} <span className="text-sm font-semibold opacity-80">INR</span>
+            {formatCurrency(wallet?.balance ?? 0.00)} <span className="text-sm font-semibold opacity-80">INR</span>
           </h2>
         </div>
 
-        <button className="px-6 py-3 rounded-2xl bg-slate-950 text-emerald-400 font-extrabold text-sm shadow-xl hover:bg-slate-900 transition-colors">
+        <button 
+          onClick={openWithdrawModal}
+          className="px-6 py-3 rounded-2xl bg-slate-950 text-emerald-400 font-extrabold text-sm shadow-xl hover:bg-slate-900 transition-colors"
+        >
           Instant Cash Out
         </button>
       </div>
@@ -74,6 +128,98 @@ export const WalletPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Withdraw Modal */}
+      {showWithdrawModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="glass-panel-dark max-w-sm w-full p-6 rounded-3xl border border-slate-800 shadow-2xl relative overflow-hidden space-y-4">
+            
+            {withdrawSuccess && (
+              <div className="absolute inset-0 bg-slate-950 z-10 flex flex-col items-center justify-center rounded-3xl gap-3">
+                <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
+                  <span className="text-xl font-bold">✓</span>
+                </div>
+                <p className="font-extrabold text-white text-lg">Withdrawal Initiated!</p>
+                <p className="text-sm text-slate-400">
+                  {formatCurrency(parseFloat(withdrawAmount))} sent to {upiId}.
+                </p>
+              </div>
+            )}
+
+            <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+              <h3 className="text-lg font-bold text-white font-display">Instant Cash Out</h3>
+              <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                IMPS / UPI
+              </span>
+            </div>
+
+            {withdrawError && (
+              <div className="bg-rose-500/10 text-rose-400 text-xs p-3 rounded-xl border border-rose-500/20">
+                {withdrawError}
+              </div>
+            )}
+
+            <form onSubmit={handleWithdraw} className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                  Amount (₹ INR)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-extrabold text-slate-400 text-sm">₹</span>
+                  <input
+                    type="number"
+                    min="10"
+                    step="1"
+                    value={withdrawAmount}
+                    onChange={(e) => setWithdrawAmount(e.target.value)}
+                    className="w-full pl-8 pr-3 py-2.5 rounded-2xl bg-slate-900 border border-slate-800 text-sm font-bold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                    required
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">Minimum withdrawal is ₹10.00</p>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                  UPI VPA ID or Bank Account Details
+                </label>
+                <input
+                  type="text"
+                  placeholder="username@upi"
+                  value={upiId}
+                  onChange={(e) => setUpiId(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-2xl bg-slate-900 border border-slate-800 text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                  required
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowWithdrawModal(false)}
+                  className="w-1/2 py-2.5 rounded-xl bg-slate-800 text-slate-350 font-bold text-xs hover:bg-slate-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-1/2 py-2.5 rounded-xl bg-emerald-500 text-slate-950 font-extrabold text-xs shadow-emerald-glow hover:bg-emerald-450 transition-colors flex items-center justify-center gap-1.5"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin animate-spin-fast" />
+                      Cashing Out...
+                    </>
+                  ) : (
+                    `Cash Out ${formatCurrency(parseFloat(withdrawAmount) || 0)}`
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

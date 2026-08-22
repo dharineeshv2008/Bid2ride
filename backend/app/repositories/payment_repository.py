@@ -25,6 +25,11 @@ class PaymentRepository(BaseRepository[Payment]):
         session = args[1] if len(args) >= 2 else (args[0] if len(args) == 1 else kwargs.get("session"))
         super().__init__(Payment, session)
 
+    async def get_by_idempotency_key(self, idempotency_key: str) -> Optional[Payment]:
+        stmt = select(Payment).where(Payment.idempotency_key == idempotency_key)
+        result = await self.session.execute(stmt)
+        return result.scalars().first()
+
     async def get_by_transaction_id(self, transaction_id: str) -> Optional[Payment]:
         """Fetches a payment record by its external transaction ID."""
         stmt = select(Payment).where(Payment.transaction_id == transaction_id)

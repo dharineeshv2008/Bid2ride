@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useSocket } from '../contexts/SocketContext';
 import { api } from '../services/api';
 import { 
   Power, 
@@ -14,15 +15,19 @@ import {
   Award,
   BarChart3,
   Flame,
-  PieChart
+  PieChart,
+  Loader2
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatCurrency } from '../utils/format';
 
 export const DashboardPage: React.FC = () => {
   const { user, driverProfile, toggleOnlineStatus } = useAuth();
+  const { socket } = useSocket();
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isToggling, setIsToggling] = useState(false);
+  const [toggleError, setToggleError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchDashboard = async () => {
@@ -36,9 +41,30 @@ export const DashboardPage: React.FC = () => {
       }
     };
     fetchDashboard();
-  }, []);
 
-  const isOnline = driverProfile?.online_status || dashboardData?.online_status || false;
+    if (socket) {
+      socket.on('connect', fetchDashboard);
+      socket.on('reconnect', fetchDashboard);
+      return () => {
+        socket.off('connect', fetchDashboard);
+        socket.off('reconnect', fetchDashboard);
+      };
+    }
+  }, [socket]);
+
+  const isOnline = driverProfile?.online_status ?? dashboardData?.online_status ?? false;
+  const handleToggleOnline = async () => {
+    setIsToggling(true);
+    setToggleError(null);
+    try {
+      await toggleOnlineStatus(!isOnline);
+    } catch (err: any) {
+      setToggleError(err.message || 'Failed to toggle online status');
+    } finally {
+      setIsToggling(false);
+    }
+  };
+
   const rating = driverProfile?.rating ?? dashboardData?.rating ?? 4.9;
   const acceptanceRate = (driverProfile as any)?.acceptance_rate ?? dashboardData?.acceptance_rate ?? 92.0;
   const walletBalance = dashboardData?.wallet_balance ?? 0.00;
@@ -76,18 +102,28 @@ export const DashboardPage: React.FC = () => {
             <p className="text-slate-400 text-sm mt-1">
               Rating: {rating} ★ • Acceptance Rate: {acceptanceRate}%
             </p>
+            {toggleError && (
+              <div className="bg-rose-500/10 text-rose-400 text-xs p-3 rounded-xl mt-3 border border-rose-500/20 max-w-md">
+                {toggleError}
+              </div>
+            )}
           </div>
 
           <button
-            onClick={() => toggleOnlineStatus(!isOnline)}
-            className={`w-full sm:w-auto px-8 py-4 rounded-2xl font-extrabold text-base flex items-center justify-center gap-3 transition-all ${
+            onClick={handleToggleOnline}
+            disabled={isToggling}
+            className={`w-full sm:w-auto px-8 py-4 rounded-2xl font-extrabold text-base flex items-center justify-center gap-3 transition-all disabled:opacity-50 ${
               isOnline
                 ? 'bg-emerald-500 text-slate-950 online-glow hover:bg-emerald-400'
                 : 'bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700'
             }`}
           >
-            <Power className="w-5 h-5" />
-            <span>{isOnline ? 'GO OFFLINE' : 'GO ONLINE'}</span>
+            {isToggling ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Power className="w-5 h-5" />
+            )}
+            <span>{isToggling ? 'LOADING...' : (isOnline ? 'GO OFFLINE' : 'GO ONLINE')}</span>
           </button>
         </div>
       </div>

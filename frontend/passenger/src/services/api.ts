@@ -25,7 +25,19 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+    console.error(`[API FAILURE DEBUG] Request failed: ${error.config?.method?.toUpperCase()} ${error.config?.url}`, error.response?.status, error.response?.data);
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean; _retryCount?: number };
+
+    // Retry logic for Network/Timeout Errors or 5xx Server Errors (max 2 retries)
+    const isRetryableError = !error.response || (error.response.status >= 500 && error.response.status <= 599);
+    const retryCount = originalRequest._retryCount || 0;
+
+    if (isRetryableError && retryCount < 2) {
+      originalRequest._retryCount = retryCount + 1;
+      console.warn(`[API RETRY] Retrying request ${originalRequest.method?.toUpperCase()} ${originalRequest.url} (Attempt ${retryCount + 1}/2) due to network/server failure.`);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return api(originalRequest);
+    }
 
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;

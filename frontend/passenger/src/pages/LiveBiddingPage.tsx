@@ -23,36 +23,44 @@ export const LiveBiddingPage: React.FC = () => {
     // Join Socket room
     joinRoom(`ride:${rideId}`);
 
-    // Initial fetch of existing bids
+    // Initial & recurring polling for bids fallback
     const fetchBids = async () => {
       try {
         const { data } = await api.get<DriverBid[]>(`/passenger/rides/${rideId}/bids`);
-        setBids(data);
+        if (Array.isArray(data)) {
+          setBids(data);
+        }
       } catch (err) {
-        console.error('Failed to fetch initial bids', err);
+        console.error('Failed to fetch bids', err);
       }
     };
     fetchBids();
+    const pollInterval = setInterval(fetchBids, 3000);
 
     // Socket Event listeners
     if (socket) {
       const handleNewBid = (bid: DriverBid) => {
         setBids((prev) => {
-          const exists = prev.some((b) => b.id === bid.id);
+          const exists = prev.some((b) => b.id === bid.id || (bid.bid_id && b.id === bid.bid_id));
           if (exists) return prev.map((b) => (b.id === bid.id ? bid : b));
           return [...prev, bid];
         });
       };
 
+      socket.on('bid_received', handleNewBid);
       socket.on('new_bid_received', handleNewBid);
       socket.on('bid_updated', handleNewBid);
 
       return () => {
+        clearInterval(pollInterval);
+        socket.off('bid_received', handleNewBid);
         socket.off('new_bid_received', handleNewBid);
         socket.off('bid_updated', handleNewBid);
         leaveRoom(`ride:${rideId}`);
       };
     }
+
+    return () => clearInterval(pollInterval);
   }, [rideId, socket]);
 
   // Countdown timer effect
@@ -67,7 +75,7 @@ export const LiveBiddingPage: React.FC = () => {
     setAcceptingBidId(bidId);
     try {
       const { data } = await api.post(`/passenger/bids/${bidId}/accept`);
-      navigate(`/tracking/${data.id}`);
+      navigate(`/tracking/${data.data?.ride_id || data.data?.id || data.data?.assignment_id || data.id}`);
     } catch (err) {
       alert('Failed to accept driver bid. It may have expired.');
       setAcceptingBidId(null);

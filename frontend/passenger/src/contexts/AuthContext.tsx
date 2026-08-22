@@ -63,7 +63,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (localToken) {
             try {
               const { data } = await api.get<User>('/auth/me');
+              if (data.role?.toUpperCase() !== 'PASSENGER') {
+                throw new Error('Authenticated user role is not passenger');
+              }
               if (active) {
+                localStorage.setItem('role', 'passenger');
                 setUser(data);
               }
               setIsLoading(false);
@@ -71,6 +75,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             } catch (err) {
               localStorage.removeItem('access_token');
               localStorage.removeItem('refresh_token');
+              localStorage.removeItem('role');
             }
           }
 
@@ -80,9 +85,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             firebase_token: idToken,
             role: 'PASSENGER',
           });
+          if (data.user?.role?.toUpperCase() !== 'PASSENGER') {
+            throw new Error('Authenticated user role is not passenger');
+          }
           if (active) {
             localStorage.setItem('access_token', data.access_token);
             localStorage.setItem('refresh_token', data.refresh_token);
+            localStorage.setItem('role', 'passenger');
             setUser(data.user);
           }
         } else {
@@ -91,13 +100,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (localToken) {
             try {
               const { data } = await api.get<User>('/auth/me');
+              if (data.role?.toUpperCase() !== 'PASSENGER') {
+                throw new Error('Authenticated user role is not passenger');
+              }
               if (active) {
+                localStorage.setItem('role', 'passenger');
                 setUser(data);
               }
             } catch (err) {
               if (active) {
                 localStorage.removeItem('access_token');
                 localStorage.removeItem('refresh_token');
+                localStorage.removeItem('role');
                 setUser(null);
               }
             }
@@ -194,8 +208,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       name: name || 'Passenger User',
     });
 
+    if (data.user?.role?.toUpperCase() !== 'PASSENGER') {
+      throw new Error('Login failed: Authenticated user role is not passenger');
+    }
+
     localStorage.setItem('access_token', data.access_token);
     localStorage.setItem('refresh_token', data.refresh_token);
+    localStorage.setItem('role', 'passenger');
     setUser(data.user);
   };
 
@@ -213,6 +232,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (_) {}
       localStorage.removeItem('access_token');
       localStorage.removeItem('refresh_token');
+      localStorage.removeItem('role');
       setUser(null);
     }
   };

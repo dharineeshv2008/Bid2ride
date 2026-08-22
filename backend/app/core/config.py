@@ -52,6 +52,8 @@ class Settings(BaseSettings):
         db_url = v or data.get("DATABASE_URL")
         
         if db_url and isinstance(db_url, str):
+            if "sqlite" in db_url.lower():
+                return db_url
             # Normalize postgres:// and postgresql:// to postgresql+asyncpg://
             if db_url.startswith("postgres://"):
                 db_url = db_url.replace("postgres://", "postgresql+asyncpg://", 1)
@@ -138,7 +140,7 @@ class Settings(BaseSettings):
     # Marketplace Settings
     SYSTEM_COMMISSION_RATE: float = 0.15
     BIDDING_WINDOW_SECONDS: int = 15
-    PICKUP_GEOFENCE_RADIUS_METERS: float = 100.0
+    PICKUP_GEOFENCE_RADIUS_METERS: float = 50000.0
 
 
 settings = Settings()

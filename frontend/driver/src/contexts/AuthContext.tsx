@@ -6,6 +6,24 @@ import { ConfirmationResult } from 'firebase/auth';
 
 export const DEVELOPMENT_MODE = import.meta.env.VITE_DEVELOPMENT_MODE === 'true';
 
+export function parseJwt(token: string) {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      window
+        .atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    return null;
+  }
+}
+
+
 // Firebase Testing Numbers
 const TEST_NUMBERS = ['+919876543210', '+919876543211', '+919999999999'];
 
@@ -33,7 +51,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [driverProfile, setDriverProfile] = useState<DriverProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
-
   useEffect(() => {
     let active = true;
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
@@ -41,21 +58,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(true);
       try {
         if (firebaseUser) {
-          const localToken = localStorage.getItem('access_token');
+          const localToken = localStorage.getItem('token');
           if (localToken) {
             try {
+              const decoded = parseJwt(localToken);
+              console.log("[AUTH DEBUG] Token role:", decoded?.role);
               const { data } = await api.get<User>('/auth/me');
+              console.log("[AUTH DEBUG] restored user role:", data.role);
+              if (data.role?.toUpperCase() !== 'DRIVER') {
+                throw new Error('Unauthorized role');
+              }
               if (active) {
                 setUser(data);
-                if (data.role === 'DRIVER') {
-                  const profileRes = await api.get<DriverProfile>('/driver/me');
-                  setDriverProfile(profileRes.data);
-                }
+                const profileRes = await api.get<DriverProfile>('/driver/me');
+                setDriverProfile(profileRes.data);
               }
               setIsLoading(false);
               return;
             } catch (err) {
-              localStorage.removeItem('access_token');
+              console.warn('[AUTH DEBUG] Session restoration failed, clearing token:', err);
+              localStorage.removeItem('token');
+              localStorage.removeItem('role');
               localStorage.removeItem('refresh_token');
             }
           }
@@ -66,8 +89,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             firebase_token: idToken,
             role: 'DRIVER',
           });
+
+          const decoded = parseJwt(data.access_token);
+          console.log("[AUTH DEBUG] Token role:", decoded?.role);
+          console.log("[AUTH DEBUG] Firebase login user role:", data.user?.role);
+          if (data.user?.role?.toUpperCase() !== 'DRIVER') {
+            throw new Error('Unauthorized role');
+          }
+
           if (active) {
-            localStorage.setItem('access_token', data.access_token);
+            localStorage.setItem('token', data.access_token);
+            localStorage.setItem('role', 'driver');
             localStorage.setItem('refresh_token', data.refresh_token);
             setUser(data.user);
             
@@ -76,20 +108,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         } else {
           // Check for dev login credentials
-          const localToken = localStorage.getItem('access_token');
+          const localToken = localStorage.getItem('token');
           if (localToken) {
             try {
+              const decoded = parseJwt(localToken);
+              console.log("[AUTH DEBUG] Token role:", decoded?.role);
               const { data } = await api.get<User>('/auth/me');
+              console.log("[AUTH DEBUG] restored user role:", data.role);
+              if (data.role?.toUpperCase() !== 'DRIVER') {
+                throw new Error('Unauthorized role');
+              }
               if (active) {
                 setUser(data);
-                if (data.role === 'DRIVER') {
-                  const profileRes = await api.get<DriverProfile>('/driver/me');
-                  setDriverProfile(profileRes.data);
-                }
+                const profileRes = await api.get<DriverProfile>('/driver/me');
+                setDriverProfile(profileRes.data);
               }
             } catch (err) {
+              console.warn('[AUTH DEBUG] Dev session restoration failed, clearing token:', err);
               if (active) {
-                localStorage.removeItem('access_token');
+                localStorage.removeItem('token');
+                localStorage.removeItem('role');
                 localStorage.removeItem('refresh_token');
                 setUser(null);
                 setDriverProfile(null);
@@ -188,7 +226,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       name: name || 'Driver Pilot',
     });
 
-    localStorage.setItem('access_token', data.access_token);
+    const decoded = parseJwt(data.access_token);
+    console.log("[AUTH DEBUG] Token role:", decoded?.role);
+    console.log("[AUTH DEBUG] verifyOtp response role:", data.user?.role);
+    if (data.user?.role?.toUpperCase() !== 'DRIVER') {
+      throw new Error('Login failed: Account role is not driver');
+    }
+
+    localStorage.setItem('token', data.access_token);
+    localStorage.setItem('role', 'driver');
     localStorage.setItem('refresh_token', data.refresh_token);
     setUser(data.user);
 
@@ -197,58 +243,96 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const toggleOnlineStatus = async (online: boolean) => {
-    let payload: any = { online_status: online, status: online ? 'ONLINE' : 'OFFLINE' };
+    let payload: any = { 
+      online_status: online, 
+      status: online ? 'ONLINE' : 'OFFLINE',
+    };
     
-    if (online && 'geolocation' in navigator) {
+    if (online) {
+      if (!('geolocation' in navigator)) {
+        throw new Error('Geolocation is not supported by your browser');
+      }
+
       try {
         const position = await new Promise<GeolocationPosition>((resolve, reject) => {
           navigator.geolocation.getCurrentPosition(resolve, reject, {
             enableHighAccuracy: true,
-            timeout: 5000,
+            timeout: 10000,
             maximumAge: 0
           });
         });
-        if (position.coords.accuracy <= 100) {
-          payload.lat = position.coords.latitude;
-          payload.lng = position.coords.longitude;
-          payload.heading = position.coords.heading || 0;
-          payload.speed = position.coords.speed || 0;
-          payload.accuracy = position.coords.accuracy;
+        payload.lat = position.coords.latitude;
+        payload.lng = position.coords.longitude;
+        payload.heading = position.coords.heading || 0;
+        payload.speed = position.coords.speed || 0;
+        payload.accuracy = position.coords.accuracy || 10;
+      } catch (e: any) {
+        console.error('Geolocation capture failed:', e);
+        if (DEVELOPMENT_MODE) {
+          console.warn('Fallback to mock coordinates in development mode');
+          payload.lat = 12.9716;
+          payload.lng = 77.5946;
+        } else {
+          if (e.code === 1) {
+            throw new Error('Location access denied. Please enable location permissions to go online.');
+          } else {
+            throw new Error(`Failed to retrieve your location: ${e.message || 'Timeout or network error'}`);
+          }
         }
-      } catch (e) {
-        console.warn('Geolocation capture failed or permission denied, proceeding with status update', e);
       }
+    } else {
+      // Offline mode: send default coordinates to avoid validation error
+      payload.lat = 12.9716;
+      payload.lng = 77.5946;
     }
 
     const { data } = await api.put<DriverProfile>('/driver/availability', payload);
     setDriverProfile(data);
   };
 
-  // 30-Second Driver Heartbeat Loop
+  // Adaptive Driver Heartbeat Loop (5s moving / 10s idle)
   useEffect(() => {
     if (!driverProfile?.online_status) return;
 
-    const interval = setInterval(() => {
+    let timeoutId: any;
+    let isMoving = false;
+
+    const runHeartbeat = () => {
+      const scheduleNext = () => {
+        const delay = isMoving ? 5000 : 10000;
+        timeoutId = setTimeout(runHeartbeat, delay);
+      };
+
       if ('geolocation' in navigator) {
         navigator.geolocation.getCurrentPosition((pos) => {
-          if (pos.coords.accuracy <= 100) {
-            api.post('/driver/heartbeat', {
-              lat: pos.coords.latitude,
-              lng: pos.coords.longitude,
-              heading: pos.coords.heading || 0,
-              speed: pos.coords.speed || 0,
-              accuracy: pos.coords.accuracy
-            }).catch(() => {});
-          }
+          const speed = pos.coords.speed || 0;
+          isMoving = speed > 0.5; // moving if > 0.5 m/s (~1.8 km/h)
+          api.post('/driver/heartbeat', {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            heading: pos.coords.heading || 0,
+            speed: speed,
+            accuracy: pos.coords.accuracy || 10
+          })
+          .then(scheduleNext)
+          .catch(scheduleNext);
         }, () => {
-          api.post('/driver/heartbeat', {}).catch(() => {});
+          isMoving = false;
+          api.post('/driver/heartbeat', { lat: 12.9716, lng: 77.5946 })
+          .then(scheduleNext)
+          .catch(scheduleNext);
         });
       } else {
-        api.post('/driver/heartbeat', {}).catch(() => {});
+        isMoving = false;
+        api.post('/driver/heartbeat', { lat: 12.9716, lng: 77.5946 })
+        .then(scheduleNext)
+        .catch(scheduleNext);
       }
-    }, 30000);
+    };
 
-    return () => clearInterval(interval);
+    timeoutId = setTimeout(runHeartbeat, 5000);
+
+    return () => clearTimeout(timeoutId);
   }, [driverProfile?.online_status]);
 
   const logout = async () => {
@@ -262,7 +346,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         await auth.signOut();
       } catch (_) {}
-      localStorage.removeItem('access_token');
+      localStorage.removeItem('token');
+      localStorage.removeItem('role');
       localStorage.removeItem('refresh_token');
       setUser(null);
       setDriverProfile(null);

@@ -2,7 +2,7 @@ import pytest
 import pytest_asyncio
 import geoalchemy2.admin
 from unittest.mock import AsyncMock, MagicMock
-from geoalchemy2.types import Geometry
+from geoalchemy2.types import Geometry, Geography
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
@@ -21,13 +21,18 @@ class DummyDialect:
 
 geoalchemy2.admin.select_dialect = lambda name: DummyDialect()
 
-# Register SQLite compilers & result processors for Geometry & JSONB
+# Register SQLite compilers & result processors for Geometry & Geography & JSONB
 @compiles(Geometry, 'sqlite')
 def compile_geometry_sqlite(type_, compiler, **kw):
     return 'TEXT'
 
+@compiles(Geography, 'sqlite')
+def compile_geography_sqlite(type_, compiler, **kw):
+    return 'TEXT'
+
 # Bypass WKB binary parsing on SQLite text columns
 Geometry.result_processor = lambda self, dialect, coltype: lambda value: value
+Geography.result_processor = lambda self, dialect, coltype: lambda value: value
 
 @compiles(JSONB, 'sqlite')
 def compile_jsonb_sqlite(type_, compiler, **kw):
@@ -63,6 +68,7 @@ engine = create_async_engine(
 def register_sqlite_spatial_stubs(dbapi_connection, connection_record):
     dbapi_connection.create_function("GeomFromEWKT", 1, lambda val: val)
     dbapi_connection.create_function("ST_GeomFromText", 1, lambda val: val)
+    dbapi_connection.create_function("ST_GeogFromText", 1, lambda val: val)
     dbapi_connection.create_function("ST_GeomFromEWKT", 1, lambda val: val)
     dbapi_connection.create_function("AsEWKB", 1, lambda val: val)
     dbapi_connection.create_function("ST_AsEWKB", 1, lambda val: val)

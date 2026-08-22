@@ -4,7 +4,7 @@ let socket: Socket | null = null;
 
 export const getSocket = (): Socket => {
   if (!socket) {
-    const token = localStorage.getItem('access_token');
+    const token = localStorage.getItem('token');
     socket = io('/', {
       auth: {
         token: token ? `Bearer ${token}` : '',
@@ -19,7 +19,7 @@ export const getSocket = (): Socket => {
 export const connectSocket = () => {
   const s = getSocket();
   if (!s.connected) {
-    const token = localStorage.getItem('access_token');
+    const token = localStorage.getItem('token');
     s.auth = { token: token ? `Bearer ${token}` : '' };
     s.connect();
   }

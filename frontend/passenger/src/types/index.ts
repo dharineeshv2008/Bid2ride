@@ -47,6 +47,7 @@ export interface RideRequest {
 
 export interface DriverBid {
   id: string;
+  bid_id?: string;
   request_id: string;
   driver_id: string;
   bid_amount: number;

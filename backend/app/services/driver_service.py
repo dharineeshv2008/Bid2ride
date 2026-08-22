@@ -67,6 +67,15 @@ class DriverService(BaseService):
         if status and driver.verification_status != "APPROVED":
             raise ValidationException("Driver account must be approved before going online")
         
+        if not status:
+            # CHECK ACTIVE ASSIGNMENT: Lock offline if driver is currently on an active ride
+            from app.repositories.ride_repository import RideAssignmentRepository
+            from app.models.ride import RideAssignment
+            assign_repo = RideAssignmentRepository(RideAssignment, self.session)
+            active = await assign_repo.get_active_driver_assignment(driver_id)
+            if active:
+                raise ValidationException("Cannot go offline while on an active ride assignment")
+
         driver.online_status = status
         if not status:
             driver.current_location = None
@@ -88,7 +97,7 @@ class DriverService(BaseService):
     async def find_nearby_drivers(self, lat: float, lng: float, radius: float = 3000.0) -> List[Tuple[Driver, float]]:
         return await self.repo.find_nearby_online_drivers(lat, lng, radius)
 
-    async def cleanup_stale_heartbeats(self, timeout_seconds: int = 90) -> int:
+    async def cleanup_stale_heartbeats(self, timeout_seconds: int = 15) -> int:
         """Sets online_status = False for drivers with last_pinged_at older than timeout_seconds."""
         from sqlalchemy import update
         threshold = datetime.datetime.utcnow() - datetime.timedelta(seconds=timeout_seconds)

@@ -51,6 +51,9 @@ class Payment(Base):
     transaction_id: Mapped[Optional[str]] = mapped_column(
         String(100), unique=True, nullable=True
     )
+    idempotency_key: Mapped[Optional[str]] = mapped_column(
+        String(255), unique=True, nullable=True
+    )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.datetime.utcnow, nullable=False
     )

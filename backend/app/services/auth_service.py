@@ -163,14 +163,10 @@ class AuthService:
                 role=role,
             )
             await self.session.flush()
-        else:
-            if role and user.role != role:
-                user.role = role
-                await self.session.flush()
 
-        await self._ensure_driver_and_wallet_records(user)
+        await self._ensure_driver_and_wallet_records(user, role)
 
-        access_token = create_access_token(subject=user.id, role=user.role)
+        access_token = create_access_token(subject=user.id, role=role)
 
         jti = uuid.uuid4()
         refresh_token = create_refresh_token(subject=user.id, jti=jti)
@@ -231,15 +227,11 @@ class AuthService:
                 role=role,
             )
             await self.session.flush()
-        else:
-            if role and user.role != role:
-                user.role = role
-                await self.session.flush()
 
-        await self._ensure_driver_and_wallet_records(user)
+        await self._ensure_driver_and_wallet_records(user, role)
 
         # Issue standard JWT credentials (identical to production flow)
-        access_token = create_access_token(subject=user.id, role=user.role)
+        access_token = create_access_token(subject=user.id, role=role)
 
         jti = uuid.uuid4()
         refresh_token = create_refresh_token(subject=user.id, jti=jti)
@@ -348,15 +340,11 @@ class AuthService:
                 role=role,
             )
             await self.session.flush()
-        else:
-            if role and user.role != role:
-                user.role = role
-                await self.session.flush()
 
-        await self._ensure_driver_and_wallet_records(user)
+        await self._ensure_driver_and_wallet_records(user, role)
 
         # Generate tokens
-        access_token = create_access_token(subject=user.id, role=user.role)
+        access_token = create_access_token(subject=user.id, role=role)
         
         jti = uuid.uuid4()
         refresh_token = create_refresh_token(subject=user.id, jti=jti)
@@ -370,9 +358,58 @@ class AuthService:
 
         return access_token, refresh_token, user
 
-    async def _ensure_driver_and_wallet_records(self, user: User) -> None:
-        """Ensures Driver and Wallet database records exist for the authenticated user."""
+    async def ensure_passenger_exists(self, user_id: uuid.UUID) -> None:
+        from app.models.driver import Passenger
+        passenger_stmt = select(Passenger).where(Passenger.id == user_id)
+        passenger = (await self.session.execute(passenger_stmt)).scalars().first()
+        if not passenger:
+            passenger = Passenger(id=user_id)
+            self.session.add(passenger)
+            await self.session.flush()
+
+    async def ensure_driver_exists(self, user_id: uuid.UUID) -> None:
         from app.models.driver import Driver, Vehicle
+        driver_stmt = select(Driver).where(Driver.id == user_id)
+        driver = (await self.session.execute(driver_stmt)).scalars().first()
+        if not driver:
+            import random
+            driver = Driver(
+                id=user_id,
+                license_number=f"DL-{random.randint(100000, 999999)}",
+                verification_status="APPROVED" if settings.DEVELOPMENT_MODE else "PENDING",
+                rating=5.0,
+                rating_count=0,
+                online_status=False,
+                acceptance_rate=100.0,
+                win_rate=100.0
+            )
+            self.session.add(driver)
+            await self.session.flush()
+
+        if not driver.active_vehicle_id and settings.DEVELOPMENT_MODE:
+            import random
+            veh_stmt = select(Vehicle).where(Vehicle.driver_id == user_id)
+            vehicles = (await self.session.execute(veh_stmt)).scalars().all()
+            if not vehicles:
+                vehicle = Vehicle(
+                    driver_id=user_id,
+                    make="Toyota",
+                    model="Camry",
+                    year=2022,
+                    color="White",
+                    plate_number=f"KA-01-MJ-{random.randint(1000, 9999)}",
+                    category="SEDAN",
+                    status="ACTIVE"
+                )
+                self.session.add(vehicle)
+                await self.session.flush()
+                driver.active_vehicle_id = vehicle.id
+            else:
+                driver.active_vehicle_id = vehicles[0].id
+            await self.session.flush()
+
+    async def _ensure_driver_and_wallet_records(self, user: User, role: str = "PASSENGER") -> None:
+        """Ensures Driver and Wallet database records exist for the authenticated user."""
         from app.models.payment import Wallet
         from app.repositories.payment_repository import WalletRepository
         
@@ -386,46 +423,12 @@ class AuthService:
             })
             await self.session.flush()
 
-        if user.role == "DRIVER":
-            driver_stmt = select(Driver).where(Driver.id == user.id)
-            driver_res = await self.session.execute(driver_stmt)
-            driver = driver_res.scalars().first()
-            if not driver:
-                import random
-                driver = Driver(
-                    id=user.id,
-                    license_number=f"DL-{random.randint(100000, 999999)}",
-                    verification_status="APPROVED" if settings.DEVELOPMENT_MODE else "PENDING",
-                    rating=5.0,
-                    rating_count=0,
-                    online_status=False,
-                    acceptance_rate=100.0,
-                    win_rate=100.0
-                )
-                self.session.add(driver)
-                await self.session.flush()
-
-            if not driver.active_vehicle_id and settings.DEVELOPMENT_MODE:
-                import random
-                veh_stmt = select(Vehicle).where(Vehicle.driver_id == user.id)
-                veh_res = await self.session.execute(veh_stmt)
-                vehicles = veh_res.scalars().all()
-                if not vehicles:
-                    vehicle = Vehicle(
-                        driver_id=user.id,
-                        make="Toyota",
-                        model="Camry",
-                        year=2022,
-                        color="White",
-                        plate_number=f"KA-01-MJ-{random.randint(1000, 9999)}",
-                        category="ECONOMY",
-                        status="ACTIVE"
-                    )
-                    self.session.add(vehicle)
-                    await self.session.flush()
-                    driver.active_vehicle_id = vehicle.id
-                else:
-                    driver.active_vehicle_id = vehicles[0].id
+        # Always ensure passenger profile exists on login
+        await self.ensure_passenger_exists(user.id)
+        
+        # Ensure driver profile exists if requested role is DRIVER
+        if role == "DRIVER":
+            await self.ensure_driver_exists(user.id)
 
     async def _update_last_login(self, user: User) -> None:
         from app.models.user import UserSettings

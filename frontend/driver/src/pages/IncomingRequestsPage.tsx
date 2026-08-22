@@ -18,15 +18,20 @@ export const IncomingRequestsPage: React.FC = () => {
   const fetchRequests = async () => {
     try {
       const { data } = await api.get<RideRequest[]>('/driver/requests/nearby');
-      setRequests(data);
+      setRequests((prev) => {
+        if (JSON.stringify(prev) === JSON.stringify(data)) {
+          return prev;
+        }
+        return data;
+      });
     } catch (err) {
       console.error('Failed to load active nearby ride requests', err);
-      setRequests([]);
     }
   };
 
   useEffect(() => {
     fetchRequests();
+    const intervalId = setInterval(fetchRequests, 5000);
 
     if (socket) {
       const handleReload = () => {
@@ -34,12 +39,21 @@ export const IncomingRequestsPage: React.FC = () => {
       };
       socket.on('new_ride_request_broadcast', handleReload);
       socket.on('ride_available', handleReload);
+      socket.on('new_ride_request', handleReload);
+      socket.on('connect', handleReload);
+      socket.on('reconnect', handleReload);
 
       return () => {
+        clearInterval(intervalId);
         socket.off('new_ride_request_broadcast', handleReload);
         socket.off('ride_available', handleReload);
+        socket.off('new_ride_request', handleReload);
+        socket.off('connect', handleReload);
+        socket.off('reconnect', handleReload);
       };
     }
+
+    return () => clearInterval(intervalId);
   }, [socket]);
 
   const handlePlaceBid = async (requestId: string, amount: number) => {
@@ -120,6 +134,22 @@ export const IncomingRequestsPage: React.FC = () => {
                     <Navigation className="w-4 h-4 text-sky-400 shrink-0" />
                     <span className="truncate">{req.dropoff_address}</span>
                   </div>
+                </div>
+
+                {/* Distance & Time Info */}
+                <div className="flex flex-wrap gap-4 text-xs text-slate-400 border-t border-slate-800/50 pt-2.5">
+                  {req.distance_km !== undefined && (
+                    <div className="flex items-center gap-1.5">
+                      <Navigation className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>{req.distance_km} km away</span>
+                    </div>
+                  )}
+                  {req.created_at && (
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Requested: {new Date(req.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* One-Tap Quick Bid Console Buttons */}
