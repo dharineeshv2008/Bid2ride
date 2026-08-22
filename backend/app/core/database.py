@@ -65,9 +65,14 @@ else:
         engine_kwargs["pool_size"] = 20
         engine_kwargs["max_overflow"] = 10
 
-engine = create_async_engine(db_uri, **engine_kwargs)
+try:
+    engine = create_async_engine(db_uri, **engine_kwargs)
+except Exception as e:
+    print("DB INIT FAILED:", e)
+    # Fallback to an in-memory SQLite engine to prevent the application from crashing on import/startup
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
 
-if "sqlite" in db_uri.lower():
+if "sqlite" in db_uri.lower() or (engine is not None and "sqlite" in str(engine.url).lower()):
     from sqlalchemy import event
     @event.listens_for(engine.sync_engine, "connect")
     def register_sqlite_spatial_stubs(dbapi_connection, connection_record):

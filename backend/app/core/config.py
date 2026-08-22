@@ -50,16 +50,23 @@ class Settings(BaseSettings):
     def assemble_db_connection(cls, v: Optional[str], values: any) -> any:
         data = values.data if hasattr(values, "data") else {}
         db_url = v or data.get("DATABASE_URL")
+        env = data.get("ENVIRONMENT") or "development"
         
         if db_url and isinstance(db_url, str):
             if "sqlite" in db_url.lower():
+                # Ensure aiosqlite is used
+                if db_url.startswith("sqlite://"):
+                    db_url = db_url.replace("sqlite://", "sqlite+aiosqlite://", 1)
+                elif not db_url.startswith("sqlite+aiosqlite://"):
+                    db_url = f"sqlite+aiosqlite:///{db_url.lstrip('/')}"
                 return db_url
+
             # Normalize postgres:// and postgresql:// to postgresql+asyncpg://
             if db_url.startswith("postgres://"):
                 db_url = db_url.replace("postgres://", "postgresql+asyncpg://", 1)
             elif db_url.startswith("postgresql://"):
                 db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-            elif not db_url.startswith("postgresql+asyncpg://"):
+            elif not db_url.startswith("postgresql+asyncpg://") and ("postgres" in db_url.lower() or "pooler" in db_url.lower()):
                 db_url = f"postgresql+asyncpg://{db_url}"
             
             # Clean sslmode query parameter to ssl for asyncpg compatibility
